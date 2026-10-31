@@ -68,14 +68,25 @@
     .secondary { border:1px solid #dfe5dc; background:white; color:#46564b; padding:11px 16px; border-radius:10px; font-weight:700; }
     .message { min-height:24px; margin:14px 0 0; font-size:13px; font-weight:600; color:#a3402e; }
     .message.success { color:#24664e; }
+    main[id^="page-"] { scroll-margin-top: 20px; }
+    .auth-gate { position:fixed; inset:0; z-index:9999; display:grid; place-items:center; padding:24px; background:rgba(36,48,43,.62); }
+    .auth-gate[hidden], [hidden] { display:none !important; }
+    .auth-card { width:min(100%,440px); padding:28px; border-radius:20px; background:#fff; box-shadow:0 24px 70px rgba(0,0,0,.2); }
+    .auth-card h2 { margin:8px 0; }
+    .auth-card p { color:var(--muted); line-height:1.55; }
+    .auth-card label { margin-top:18px; }
+    .auth-card input { width:100%; min-height:44px; border:1px solid var(--line); border-radius:9px; padding:10px 12px; }
+    .auth-card button { margin-top:14px; }
+    .auth-status { min-height:24px; font-size:13px; font-weight:600; }
+    .nav-item { display:block; text-decoration:none; }
     @media(max-width:850px) { .app-shell{grid-template-columns:1fr} .side{padding:16px 22px; flex-direction:row; align-items:center; gap:16px} .side-foot{display:none} .main-area{padding:30px 20px 60px} }
     @media(max-width:650px) { .columns{grid-template-columns:1fr} .stats{gap:8px} .stat{padding:15px;min-height:110px} .stat-number{font-size:34px} .form-grid{grid-template-columns:1fr} .topline{align-items:start} .primary{padding:11px} .priority{display:none} }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.577.0/dist/umd/lucide.min.js" type="text/javascript"></script>
   <script src="https://cdn.tailwindcss.com/3.4.17" type="text/javascript"></script>
-  <script src="/_sdk/8fed440c6f94b5da.data_sdk.js" type="text/javascript" integrity="sha512-hrvcCCJ6nkL5gG3mdqPDbgyAf9a/fg/zBF51sU5N3rM1WmeSu8K36+6wn9TZeAZrLIonoaPBeVyFsXxXxZjq0w=="></script>
-  <script src="/_sdk/dc9eaed14b563eb8.editing_sdk.js" type="text/javascript" integrity="sha512-U1pSpFrQ86eOO8lqZ1xWYnEMHIYQODbWTwR3Q90z8aWFeEUSJieZRq+g7FYNvauPQ0rG84s3SFjWyB/NxzRXNA=="></script>
-  <script src="/_sdk/dfeb017e55db4863.resizing_sdk.js" type="text/javascript" integrity="sha512-kbPBNN/FAxsctln1jqNvXyIdF7mIhQx0C+eGGC2IF3mNjNZZcftDT1wFztswSSk4KXRWYHIC3uA9NMfJV4IVUw=="></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./supabase-config.js"></script>
+  <script src="./data.js"></script>
  </head>
  <body data-template-id="__page-root" style="background: rgb(255, 255, 255);">
   <div class="app-shell">
@@ -87,11 +98,11 @@
      </div>
      <div class="flex flex-col gap-2 mt-3"><a href="#page-1" data-template-id="nav-page-1" class="canva-button side-link">Dashboard</a> <a href="#page-2" data-template-id="nav-page-2" class="canva-button side-link">Week At A Glance</a> <a href="#page-6" data-template-id="nav-page-6" class="canva-button side-link">Week in Depth</a> <a href="#page-3" data-template-id="nav-page-3" class="canva-button side-link">Habit Tracker</a> <a href="#page-4" data-template-id="nav-page-4" class="canva-button side-link">Quarterly Finance</a> <a href="#page-5" data-template-id="nav-page-5" class="canva-button side-link">Book Tracker</a>
      </div>
-     <a class="side-link github-edit-link" href="https://github.com/sottyon/dash/edit/main/index.html" target="_blank" rel="noopener noreferrer"><i data-lucide="code-xml" aria-hidden="true" class="w-4 h-4"></i><span>Edit site on GitHub</span></a>
+     <button id="sign-out" type="button" class="side-link secondary" hidden>Sign out</button>
     </nav>
     <p data-template-id="sidebar-note" class="canva-text side-foot">A little clarity for everything on your plate.</p>
    </aside>
-   <main class="main-area">
+   <main id="page-1" class="main-area">
     <div class="content">
      <header class="topline">
       <div>
@@ -153,6 +164,19 @@
     </div>
    </main>
   </div>
+  <section id="auth-gate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="auth-heading">
+   <div class="auth-card">
+    <p class="eyebrow">Private dashboard</p>
+    <h2 id="auth-heading">Sign in to save your data</h2>
+    <p id="auth-description">Use your email to receive a secure sign-in link. Your dashboard data is private to your account.</p>
+    <form id="auth-form">
+     <label for="auth-email">Email address</label>
+     <input id="auth-email" type="email" autocomplete="email" required>
+     <button id="auth-submit" type="submit" class="primary">Email me a sign-in link</button>
+    </form>
+    <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
+   </div>
+  </section>
   <template id="task-template">
    <article data-template-id="task-row" class="canva-card task-row">
     <input class="task-check" type="checkbox" aria-label="Mark task complete">
@@ -165,6 +189,7 @@
    </article>
   </template>
   <script>
+    (() => {
     const records = new Map();
     const rows = new Map();
     let filter = 'all';
@@ -252,7 +277,6 @@
     $('task-form').addEventListener('submit', async event => {
       event.preventDefault();
       if (!ready) { message('Tasks are not connected yet. Please try again shortly.'); return; }
-      if (records.size >= 999) { message('The 999-item limit has been reached. Delete a task before adding another.'); return; }
       const title = $('task-title').value.trim();
       if (!title) { $('task-title').focus(); return; }
       const save = $('save-task');
@@ -277,8 +301,9 @@
           refresh();
         }});
         if (result.isOk) ready = true;
-        else message('Tasks could not connect to your Canva Sheet. Please reload to try again.');
-      } catch (_) { message('Tasks could not connect to your Canva Sheet. Please reload to try again.'); }
+        else message('Tasks could not connect to your database. Check your Supabase setup, then reload.');
+      } catch (_) { message('Tasks could not connect to your database. Check your Supabase setup, then reload.'); }
+    })();
     })();
   </script>
  
@@ -320,12 +345,9 @@
   </style>
   <script src="https://cdn.tailwindcss.com/3.4.17" type="text/javascript"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.577.0/dist/umd/lucide.min.js" type="text/javascript"></script>
-  <script src="/_sdk/8fed440c6f94b5da.data_sdk.js" type="text/javascript" integrity="sha512-hrvcCCJ6nkL5gG3mdqPDbgyAf9a/fg/zBF51sU5N3rM1WmeSu8K36+6wn9TZeAZrLIonoaPBeVyFsXxXxZjq0w=="></script>
-  <script src="/_sdk/dc9eaed14b563eb8.editing_sdk.js" type="text/javascript" integrity="sha512-U1pSpFrQ86eOO8lqZ1xWYnEMHIYQODbWTwR3Q90z8aWFeEUSJieZRq+g7FYNvauPQ0rG84s3SFjWyB/NxzRXNA=="></script>
-  <script src="/_sdk/dfeb017e55db4863.resizing_sdk.js" type="text/javascript" integrity="sha512-kbPBNN/FAxsctln1jqNvXyIdF7mIhQx0C+eGGC2IF3mNjNZZcftDT1wFztswSSk4KXRWYHIC3uA9NMfJV4IVUw=="></script>
  </head>
  <body data-template-id="__page-root" class="w-full min-h-screen" style="background: rgb(255, 255, 255);">
-  <div class="w-full px-4 py-7 md:px-9 md:py-10">
+  <div id="page-2" class="w-full px-4 py-7 md:px-9 md:py-10">
    <div class="mx-auto w-full max-w-7xl">
     <header class="fade flex flex-col gap-5 border-b border-[#dbdfeb] pb-7 sm:flex-row sm:items-end sm:justify-between">
      <div>
@@ -334,8 +356,8 @@
       <p data-template-id="header-description" class="canva-text mt-2" style="color: rgb(119, 128, 120); font-weight: 400; font-style: normal; font-size: 15px;">A little clarity for everything that matters this week.</p>
      </div>
      <div class="flex flex-wrap items-center gap-2" aria-label="Week navigation">
-      <button id="previous-week" type="button" class="small-btn" aria-label="Previous week">←</button>
-      <div id="week-range" class="min-w-[175px] text-center font-semibold" aria-live="polite"></div><button id="next-week" type="button" class="small-btn" aria-label="Next week">→</button> <button id="today-week" data-template-id="today-button" type="button" class="canva-button small-btn" style="background: rgb(255, 254, 249); color: rgb(40, 53, 45); font-weight: 400; font-style: normal; font-size: 15px;">This week</button>
+      <button id="glance-previous-week" type="button" class="small-btn" aria-label="Previous week">←</button>
+      <div id="glance-week-range" class="min-w-[175px] text-center font-semibold" aria-live="polite"></div><button id="glance-next-week" type="button" class="small-btn" aria-label="Next week">→</button> <button id="today-week" data-template-id="today-button" type="button" class="canva-button small-btn" style="background: rgb(255, 254, 249); color: rgb(40, 53, 45); font-weight: 400; font-style: normal; font-size: 15px;">This week</button>
      </div>
     </header>
     <main class="pt-7">
@@ -366,7 +388,7 @@
        <p data-template-id="task-kicker" class="canva-text eyebrow mb-2" style="color: rgb(71, 105, 80); font-weight: 700; font-style: normal; font-size: 15px;">02 / TO DO</p>
        <h2 data-template-id="task-heading" class="canva-text display mb-2" style="color: rgb(40, 53, 45); font-weight: 600; font-style: normal; font-size: 23px;">The checklist</h2>
        <p data-template-id="task-description" class="canva-text mb-5" style="color: rgb(119, 128, 120); font-weight: 400; font-style: normal; font-size: 15px;">Keep the important things moving.</p>
-       <div id="task-list"></div>
+       <div id="planner-task-list"></div>
        <p id="task-empty" data-template-id="task-empty-label" class="canva-text mb-5" style="color: rgb(119, 128, 120); font-weight: 400; font-style: normal; font-size: 15px;">Nothing on the list yet.</p>
        <form class="add-form mt-5 flex flex-col gap-2 sm:flex-row" data-section="task">
         <label data-template-id="task-input-label" class="canva-text sr-only" for="task-input" style="font-weight: 400; font-style: normal; font-size: 15px;">New task</label> <input id="task-input" data-template-id="task-placeholder" class="canva-input field flex-1" type="text" maxlength="240" required="" placeholder="Add a task…" style="font-weight: 400; font-style: normal; font-size: 15px;"> <button data-template-id="task-add" class="canva-button action shrink-0" type="submit" style="background: rgb(71, 105, 80); color: rgb(255, 255, 255); font-weight: 700; font-style: normal; font-size: 15px;">Add task</button>
@@ -412,19 +434,20 @@
       </div>
       <div id="calendar-week" class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7"></div>
      </section>
-     <p id="status" class="mt-5 min-h-[24px] text-sm font-medium" role="status" aria-live="polite"></p>
+     <p id="planner-status" class="mt-5 min-h-[24px] text-sm font-medium" role="status" aria-live="polite"></p>
     </main>
     <footer class="mt-7 border-t border-[#dbdfeb] pt-5">
      <p data-template-id="footer-note" class="canva-text" style="color: rgb(68, 54, 47); font-weight: 400; font-style: italic; font-size: 15px;">One week at a time. Make it yours.</p>
     </footer>
    </div>
   </div>
-  <template id="entry-template">
+  <template id="planner-entry-template">
    <div data-template-id="entry-row" class="canva-card entry" data-record-id="">
     <input class="entry-check" type="checkbox" aria-label="Mark item complete"> <span data-template-id="entry-content" class="canva-text entry-content"></span> <button data-template-id="entry-delete" class="canva-button delete" type="button" aria-label="Delete item">×</button>
    </div>
   </template>
   <script>
+    (() => {
     const sections = ["goal", "task", "gym"];
     const notes = ["focus", "reflection", "reading"];
     const calendarEvents = [
@@ -453,7 +476,7 @@
     }
     function weekKey() { return isoDay(visibleMonday); }
     function showStatus(message, error = false) {
-      const el = document.getElementById("status");
+      const el = document.getElementById("planner-status");
       el.textContent = message;
       el.style.color = error ? "#a1473f" : "#476950";
     }
@@ -513,17 +536,17 @@
       sunday.setDate(sunday.getDate() + 6);
       const start = visibleMonday.toLocaleDateString("en-US", { month:"short", day:"numeric" });
       const end = sunday.toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
-      document.getElementById("week-range").textContent = `${start} – ${end}`;
+      document.getElementById("glance-week-range").textContent = `${start} – ${end}`;
 
       for (const section of sections) {
         const rows = currentRecords(section);
-        const list = document.getElementById(`${section}-list`);
+        const list = document.getElementById(section === "task" ? "planner-task-list" : `${section}-list`);
         const seen = new Set();
         for (const row of rows) {
           seen.add(row.__backendId);
           let el = [...list.children].find(node => node.dataset.recordId === row.__backendId);
           if (!el) {
-            el = document.getElementById("entry-template").content.firstElementChild.cloneNode(true);
+            el = document.getElementById("planner-entry-template").content.firstElementChild.cloneNode(true);
             el.dataset.recordId = row.__backendId;
             list.appendChild(el);
           }
@@ -551,8 +574,8 @@
         trackable.length ? `${complete} of ${trackable.length} completed` : "A fresh week ahead";
     }
 
-    document.getElementById("previous-week").addEventListener("click", () => changeWeek(-7));
-    document.getElementById("next-week").addEventListener("click", () => changeWeek(7));
+    document.getElementById("glance-previous-week").addEventListener("click", () => changeWeek(-7));
+    document.getElementById("glance-next-week").addEventListener("click", () => changeWeek(7));
     document.getElementById("today-week").addEventListener("click", () => {
       visibleMonday = mondayOf(new Date());
       renderWeek();
@@ -568,7 +591,6 @@
       const input = form.querySelector("input");
       const content = input.value.trim();
       if (!content || !ready) { if (!ready) showStatus("Still connecting. Please try again.", true); return; }
-      if (records.size >= 999) { showStatus("The 999-entry limit has been reached. Delete an entry before adding another.", true); return; }
       const button = form.querySelector("button");
       button.disabled = true;
       showStatus("Saving…");
@@ -593,7 +615,6 @@
       const content = input.value.trim();
       const existing = currentRecords(section)[0];
       if (!content && !existing) { showStatus("Write something before saving.", true); return; }
-      if (!existing && records.size >= 999) { showStatus("The 999-entry limit has been reached.", true); return; }
       const button = form.querySelector("button");
       button.disabled = true;
       input.dataset.saving = "true";
@@ -616,7 +637,7 @@
     }));
 
     for (const section of sections) {
-      document.getElementById(`${section}-list`).addEventListener("change", event => {
+      document.getElementById(section === "task" ? "planner-task-list" : `${section}-list`).addEventListener("change", event => {
         if (!event.target.matches(".entry-check")) return;
         const id = event.target.closest("[data-record-id]").dataset.recordId;
         const row = records.get(id);
@@ -643,7 +664,7 @@
           }
         }, 650);
       });
-      document.getElementById(`${section}-list`).addEventListener("click", async event => {
+      document.getElementById(section === "task" ? "planner-task-list" : `${section}-list`).addEventListener("click", async event => {
         const button = event.target.closest(".delete");
         if (!button || !ready) return;
         const id = button.closest("[data-record-id]").dataset.recordId;
@@ -682,8 +703,9 @@
         if (!result.isOk) throw result.error;
         ready = true;
       } catch {
-        showStatus("Could not connect to your Canva Sheet. Try reopening the dashboard.", true);
+        showStatus("Could not connect to your database. Check your Supabase setup, then reload.", true);
       }
+    })();
     })();
   </script>
  
@@ -727,20 +749,17 @@
   </style>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.577.0/dist/umd/lucide.min.js" type="text/javascript"></script>
   <script src="https://cdn.tailwindcss.com/3.4.17" type="text/javascript"></script>
-  <script src="/_sdk/8fed440c6f94b5da.data_sdk.js" type="text/javascript" integrity="sha512-hrvcCCJ6nkL5gG3mdqPDbgyAf9a/fg/zBF51sU5N3rM1WmeSu8K36+6wn9TZeAZrLIonoaPBeVyFsXxXxZjq0w=="></script>
-  <script src="/_sdk/dc9eaed14b563eb8.editing_sdk.js" type="text/javascript" integrity="sha512-U1pSpFrQ86eOO8lqZ1xWYnEMHIYQODbWTwR3Q90z8aWFeEUSJieZRq+g7FYNvauPQ0rG84s3SFjWyB/NxzRXNA=="></script>
-  <script src="/_sdk/dfeb017e55db4863.resizing_sdk.js" type="text/javascript" integrity="sha512-kbPBNN/FAxsctln1jqNvXyIdF7mIhQx0C+eGGC2IF3mNjNZZcftDT1wFztswSSk4KXRWYHIC3uA9NMfJV4IVUw=="></script>
  </head>
  <body data-template-id="__page-root" class="w-full" style="background: rgb(247, 248, 243);">
-  <div class="app-shell">
+  <div id="page-6" class="app-shell">
    <aside data-template-id="sidebar" class="canva-sidebar sidebar" style="background: rgb(255, 255, 255);">
     <div class="mb-9">
      <p data-template-id="brand-kicker" class="canva-text section-label mb-2" style="color: rgb(35, 93, 72); font-weight: 700; font-style: normal; font-size: 11px;">THE WEEKLY EDIT</p>
      <p data-template-id="brand-name" class="canva-text display leading-tight" style="font-size: 23px; color: rgb(36, 51, 46); font-weight: 600; font-style: normal;">Weekly Planner Dashboard</p>
     </div>
-    <nav aria-label="Dashboard pages" class="nav-list flex flex-col"><span data-template-id="nav-dashboard" class="canva-text nav-item px-3 py-2 muted" style="color: rgb(113, 128, 121); font-weight: 400; font-style: normal; font-size: 15px;">Dashboard</span> <span data-template-id="nav-glance" class="canva-text nav-item px-3 py-2 muted" style="color: rgb(113, 128, 121); font-weight: 400; font-style: normal; font-size: 15px;">Week At A Glance</span> <span data-template-id="nav-habits" class="canva-text nav-item px-3 py-2 muted" style="color: rgb(113, 128, 121); font-weight: 400; font-style: normal; font-size: 15px;">Habit Tracker</span> <span data-template-id="nav-finance" class="canva-text nav-item px-3 py-2 muted" style="color: rgb(113, 128, 121); font-weight: 400; font-style: normal; font-size: 15px;">Quarterly Finance</span> <span data-template-id="nav-books" class="canva-text nav-item px-3 py-2 muted" style="color: rgb(113, 128, 121); font-weight: 400; font-style: normal; font-size: 15px;">Book Tracker</span> <span data-template-id="nav-detail" aria-current="page" class="canva-text nav-item px-3 py-2 rounded-lg font-bold" style="background: rgb(231, 238, 230); color: rgb(35, 93, 72); font-weight: 700; font-style: normal; font-size: 15px;">Detailed Week</span>
+    <nav aria-label="Dashboard pages" class="nav-list flex flex-col"><a href="#page-1" data-template-id="nav-dashboard" class="canva-text nav-item px-3 py-2 muted">Dashboard</a> <a href="#page-2" data-template-id="nav-glance" class="canva-text nav-item px-3 py-2 muted">Week At A Glance</a> <a href="#page-3" data-template-id="nav-habits" class="canva-text nav-item px-3 py-2 muted">Habit Tracker</a> <a href="#page-4" data-template-id="nav-finance" class="canva-text nav-item px-3 py-2 muted">Quarterly Finance</a> <a href="#page-5" data-template-id="nav-books" class="canva-text nav-item px-3 py-2 muted">Book Tracker</a> <a href="#page-6" data-template-id="nav-detail" aria-current="page" class="canva-text nav-item px-3 py-2 rounded-lg font-bold" style="background: rgb(231, 238, 230); color: rgb(35, 93, 72); font-weight: 700; font-style: normal; font-size: 15px;">Detailed Week</a>
     </nav>
-    <p data-template-id="nav-note" class="canva-text muted mt-8 px-3 leading-relaxed" style="font-size: 12px; color: rgb(113, 128, 121); font-weight: 400; font-style: normal;">Other dashboard pages are listed here; their links aren't available in this page.</p>
+    <p data-template-id="nav-note" class="canva-text muted mt-8 px-3 leading-relaxed" style="font-size: 12px; color: rgb(113, 128, 121); font-weight: 400; font-style: normal;">Jump between your dashboard pages.</p>
    </aside>
    <main class="main-area">
     <header class="flex flex-wrap items-end justify-between gap-5 mb-7">
@@ -749,19 +768,19 @@
       <h1 data-template-id="page-title" class="canva-text display leading-tight" style="color: rgb(36, 51, 46); font-weight: 600; font-style: normal; font-size: 30px;">A closer look at your week.</h1>
       <p data-template-id="page-description" class="canva-text muted mt-2" style="color: rgb(113, 128, 121); font-weight: 400; font-style: normal; font-size: 15px;">Events, spending and habits — in one easy-to-scan place.</p>
      </div>
-     <div class="flex items-center flex-wrap gap-2" aria-label="Week navigation"><button id="previous-week" data-template-id="previous-week-label" type="button" class="canva-button px-3 py-2 border rounded-lg bg-white" style="background: rgb(255, 255, 255); color: rgb(36, 51, 46); font-weight: 400; font-style: normal; font-size: 15px;">← Previous</button> <button id="current-week" data-template-id="current-week-label" type="button" class="canva-button px-3 py-2 border rounded-lg bg-white" style="background: rgb(255, 255, 255); color: rgb(36, 51, 46); font-weight: 400; font-style: normal; font-size: 15px;">This week</button> <button id="next-week" data-template-id="next-week-label" type="button" class="canva-button px-3 py-2 border rounded-lg bg-white" style="background: rgb(255, 255, 255); color: rgb(36, 51, 46); font-weight: 400; font-style: normal; font-size: 15px;">Next →</button>
+     <div class="flex items-center flex-wrap gap-2" aria-label="Week navigation"><button id="detail-previous-week" data-template-id="previous-week-label" type="button" class="canva-button px-3 py-2 border rounded-lg bg-white" style="background: rgb(255, 255, 255); color: rgb(36, 51, 46); font-weight: 400; font-style: normal; font-size: 15px;">← Previous</button> <button id="current-week" data-template-id="current-week-label" type="button" class="canva-button px-3 py-2 border rounded-lg bg-white" style="background: rgb(255, 255, 255); color: rgb(36, 51, 46); font-weight: 400; font-style: normal; font-size: 15px;">This week</button> <button id="detail-next-week" data-template-id="next-week-label" type="button" class="canva-button px-3 py-2 border rounded-lg bg-white" style="background: rgb(255, 255, 255); color: rgb(36, 51, 46); font-weight: 400; font-style: normal; font-size: 15px;">Next →</button>
      </div>
     </header>
     <section aria-labelledby="week-heading">
      <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
       <div>
        <h2 id="week-heading" data-template-id="week-heading" class="canva-text display" style="color: rgb(36, 51, 46); font-weight: 600; font-style: normal; font-size: 23px;">The daily view</h2>
-       <p id="week-range" class="muted mt-1" aria-live="polite"></p>
+       <p id="detail-week-range" class="muted mt-1" aria-live="polite"></p>
       </div>
       <p data-template-id="scroll-hint" class="canva-text muted" style="font-size: 12px; color: rgb(113, 128, 121); font-weight: 400; font-style: normal;">Scroll sideways to see all seven days ↗</p>
      </div>
      <p data-template-id="calendar-notice" class="canva-banner rounded-xl border px-4 py-3 mb-5 leading-relaxed" style="background: rgb(255, 249, 237); border-color: rgb(236, 220, 180); color: rgb(102, 80, 44); font-weight: 400; font-style: normal; font-size: 15px;">Calendar events are not connected on this page yet. Add the existing Google Calendar event data to display timed events and all-day holidays on their correct dates.</p>
-     <p id="status" role="status" aria-live="polite" class="mb-3 text-sm muted hidden"></p>
+     <p id="detail-status" role="status" aria-live="polite" class="mb-3 text-sm muted hidden"></p>
      <div class="week-scroll" role="region" aria-label="Seven-day planner" tabindex="0">
       <div id="week-grid" class="week-grid"></div>
      </div>
@@ -796,15 +815,16 @@
     </div>
    </article>
   </template>
-  <template id="entry-template">
+  <template id="detail-entry-template">
    <div data-template-id="saved-entry" class="canva-list entry"><span data-template-id="saved-entry-value" class="canva-text" style="font-size:12px"></span>
     <div class="flex flex-col items-end gap-1"><button data-template-id="delete-entry" type="button" class="canva-button delete-action">Delete</button> <button data-template-id="confirm-entry-delete" type="button" class="canva-button delete-action hidden">Confirm</button> <button data-template-id="cancel-entry-delete" type="button" class="canva-button muted hidden" style="font-size:11px">Cancel</button>
     </div>
    </div>
   </template>
   <script>
+    (() => {
     const grid = document.getElementById('week-grid');
-    const status = document.getElementById('status');
+    const status = document.getElementById('detail-status');
     const dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     const money = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'});
     let records = [];
@@ -830,7 +850,7 @@
     }
     function updateWeek() {
       const end = addDays(monday, 6);
-      document.getElementById('week-range').textContent =
+      document.getElementById('detail-week-range').textContent =
         `${monday.toLocaleDateString('en-US',{month:'long',day:'numeric'})} – ${end.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}`;
       for (let i=0; i<7; i++) {
         const day = addDays(monday, i), card = grid.children[i];
@@ -843,7 +863,7 @@
       }
     }
     function addEntry(list, record, format) {
-      const row = document.getElementById('entry-template').content.firstElementChild.cloneNode(true);
+      const row = document.getElementById('detail-entry-template').content.firstElementChild.cloneNode(true);
       row.dataset.recordId = record.__backendId;
       row.querySelector('[data-template-id="saved-entry-value"]').textContent = format(record);
       const remove = row.querySelector('[data-template-id="delete-entry"]');
@@ -904,8 +924,7 @@
           const form = card.querySelector(selector);
           form.addEventListener('submit', async event => {
             event.preventDefault();
-            if (!ready) { message('Your Canva Sheet is not available right now. Please try again later.'); return; }
-            if (records.length >= 999) { message('The 999-entry limit has been reached. Delete an entry before adding another.'); return; }
+            if (!ready) { message('Your database is not available. Sign in and check your Supabase setup.'); return; }
             const input = form.querySelector('input');
             const value = input.value.trim();
             if (!value || (category === 'spending' && !(Number(value) > 0))) return;
@@ -930,8 +949,8 @@
       }
       updateWeek();
     }
-    document.getElementById('previous-week').addEventListener('click', () => { monday=addDays(monday,-7); updateWeek(); });
-    document.getElementById('next-week').addEventListener('click', () => { monday=addDays(monday,7); updateWeek(); });
+    document.getElementById('detail-previous-week').addEventListener('click', () => { monday=addDays(monday,-7); updateWeek(); });
+    document.getElementById('detail-next-week').addEventListener('click', () => { monday=addDays(monday,7); updateWeek(); });
     document.getElementById('current-week').addEventListener('click', () => { monday=startOfWeek(new Date()); updateWeek(); });
     buildDays();
     (async () => {
@@ -943,10 +962,11 @@
           }
         });
         ready = result.isOk;
-        if (!ready) message('Your Canva Sheet is not available right now. Please try again later.');
+        if (!ready) message('Your database is not available. Sign in and check your Supabase setup.');
       } catch (_) {
-        message('Your Canva Sheet is not available right now. Please try again later.');
+        message('Your database is not available. Sign in and check your Supabase setup.');
       }
+    })();
     })();
   </script>
  
@@ -978,12 +998,9 @@
   </style>
   <script src="https://cdn.tailwindcss.com/3.4.17" type="text/javascript"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.577.0/dist/umd/lucide.min.js" type="text/javascript"></script>
-  <script src="/_sdk/8fed440c6f94b5da.data_sdk.js" type="text/javascript" integrity="sha512-hrvcCCJ6nkL5gG3mdqPDbgyAf9a/fg/zBF51sU5N3rM1WmeSu8K36+6wn9TZeAZrLIonoaPBeVyFsXxXxZjq0w=="></script>
-  <script src="/_sdk/dc9eaed14b563eb8.editing_sdk.js" type="text/javascript" integrity="sha512-U1pSpFrQ86eOO8lqZ1xWYnEMHIYQODbWTwR3Q90z8aWFeEUSJieZRq+g7FYNvauPQ0rG84s3SFjWyB/NxzRXNA=="></script>
-  <script src="/_sdk/dfeb017e55db4863.resizing_sdk.js" type="text/javascript" integrity="sha512-kbPBNN/FAxsctln1jqNvXyIdF7mIhQx0C+eGGC2IF3mNjNZZcftDT1wFztswSSk4KXRWYHIC3uA9NMfJV4IVUw=="></script>
  </head>
  <body data-template-id="__page-root" style="background: rgb(255, 255, 255);">
-  <div class="app-shell w-full">
+  <div id="page-3" class="app-shell w-full">
    <div class="max-w-6xl mx-auto px-4 sm:px-8 py-7 sm:py-12">
     <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-7 mb-9 fade-in">
      <div>
@@ -1007,7 +1024,13 @@
        <div>
         <h2 id="grid-heading" data-template-id="grid-heading-text" class="canva-text display" style="color: rgb(35, 51, 41); font-weight: 600; font-style: normal; font-size: 24px;">Your week at a glance</h2>
         <p data-template-id="grid-description" class="canva-text mt-1" style="color: rgb(104, 116, 107); font-weight: 400; font-style: normal; font-size: 14px;">Check off each day as you go. Progress adds up.</p>
-       </div><span data-template-id="week-badge" class="canva-tag self-start sm:self-auto rounded-full px-4 py-2 font-semibold" style="background: rgb(208, 239, 239); color: rgb(39, 90, 66); font-weight: 400; font-style: normal; font-size: 12px;">MON — SUN</span>
+       </div>
+       <div class="flex flex-wrap items-center gap-2">
+        <button id="habit-previous-week" type="button" class="rounded-lg border border-[#dbdfeb] bg-white px-3 py-2 text-sm">← Previous</button>
+        <button id="habit-current-week" type="button" class="rounded-lg border border-[#dbdfeb] bg-white px-3 py-2 text-sm">This week</button>
+        <button id="habit-next-week" type="button" class="rounded-lg border border-[#dbdfeb] bg-white px-3 py-2 text-sm">Next →</button>
+        <span id="habit-week-badge" class="canva-tag rounded-full px-4 py-2 font-semibold" style="background: rgb(208, 239, 239); color: rgb(39, 90, 66); font-size: 12px;"></span>
+       </div>
       </div>
       <div class="overflow-x-auto px-4 sm:px-7 pb-7">
        <div class="min-w-[760px]">
@@ -1016,7 +1039,7 @@
         </div>
         <div data-template-id="daily-heading" class="canva-tag rounded-xl px-4 py-2.5 text-sm font-bold mb-1" style="background: rgb(208, 239, 239); color: rgb(68, 54, 47); font-weight: 400; font-style: normal; font-size: 13px;">✳  DAILY HABITS</div>
         <div id="habit-list"></div>
-        <p id="empty-state" data-template-id="empty-state" class="canva-text px-4 py-8 text-center" style="color: rgb(0, 0, 0); font-weight: 400; font-style: normal; font-size: 16px;">No habits yet. Add your first daily habit below.</p>
+        <p id="habit-empty-state" data-template-id="empty-state" class="canva-text px-4 py-8 text-center" style="color: rgb(0, 0, 0); font-weight: 400; font-style: normal; font-size: 16px;">No habits yet. Add your first daily habit below.</p>
        </div>
       </div>
      </section>
@@ -1039,7 +1062,7 @@
           <label for="habit-goal" data-template-id="goal-label" class="canva-text block font-semibold mb-2" style="color: rgb(35, 51, 41); font-weight: 400; font-style: normal; font-size: 14px;">Weekly goal</label> <select id="habit-goal" class="w-full h-[50px] rounded-xl border border-[#dce3d8] bg-[#fafbf8] px-2"> <option value="1">1 / 7</option><option value="2">2 / 7</option><option value="3">3 / 7</option> <option value="4">4 / 7</option><option value="5" selected="">5 / 7</option><option value="6">6 / 7</option><option value="7">7 / 7</option> </select>
          </div>
         </div><button id="add-button" type="submit" data-template-id="add-button" class="canva-button w-full rounded-xl px-5 py-3.5 font-bold transition hover:opacity-90 disabled:opacity-50" style="background: rgb(68, 54, 47); color: rgb(255, 255, 255); font-weight: 700; font-style: normal; font-size: 16px;">Add daily habit</button>
-        <p id="status" class="text-sm min-h-5 text-[#da7b87]" role="status" aria-live="polite"></p>
+        <p id="habit-status" class="text-sm min-h-5 text-[#da7b87]" role="status" aria-live="polite"></p>
        </form>
       </section>
       <section aria-labelledby="summary-title" class="fade-in">
@@ -1064,7 +1087,7 @@
          <div>
           <p data-template-id="remaining-label" class="canva-text font-semibold" style="color: rgb(68, 54, 47); font-weight: 400; font-style: normal; font-size: 14px;">Still to go</p>
           <p data-template-id="remaining-caption" class="canva-text" style="color: rgb(218, 123, 135); font-weight: 400; font-style: normal; font-size: 12px;">Room to grow</p>
-         </div><strong id="remaining-count" class="metric text-3xl">0</strong>
+         </div><strong id="habit-remaining-count" class="metric text-3xl">0</strong>
         </article>
        </div>
       </section>
@@ -1084,11 +1107,13 @@
    </div>
   </template>
   <script>
+    (() => {
     const days = ['mon','tue','wed','thu','fri','sat','sun'];
     const list = document.getElementById('habit-list');
     const form = document.getElementById('habit-form');
-    const status = document.getElementById('status');
+    const status = document.getElementById('habit-status');
     const addButton = document.getElementById('add-button');
+    let habitVisibleMonday = habitMondayOf(new Date());
     let records = [];
     let initialized = false;
     const pending = new Map();
@@ -1106,7 +1131,32 @@
       writeQueue = job.catch(() => {});
       return job;
     }
-    function countDone(record) { return days.filter(day => record['day_' + day]).length; }
+    function habitMondayOf(date) {
+      const monday = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7);
+      return monday;
+    }
+    function habitWeekKey() {
+      const year = habitVisibleMonday.getFullYear();
+      const month = String(habitVisibleMonday.getMonth() + 1).padStart(2, '0');
+      const day = String(habitVisibleMonday.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    function habitWeekState(record) { return record.weeks?.[habitWeekKey()] || {}; }
+    function updateHabitWeek() {
+      const sunday = new Date(habitVisibleMonday);
+      sunday.setDate(sunday.getDate() + 6);
+      const format = date => new Intl.DateTimeFormat('en-US', { month:'short', day:'numeric' }).format(date);
+      document.getElementById('habit-week-badge').textContent =
+        `${format(habitVisibleMonday)} – ${format(sunday)}`;
+      render();
+    }
+    function shiftHabitWeek(offset) {
+      habitVisibleMonday = new Date(habitVisibleMonday);
+      habitVisibleMonday.setDate(habitVisibleMonday.getDate() + offset);
+      updateHabitWeek();
+    }
+    function countDone(record) { return days.filter(day => habitWeekState(record)[day]).length; }
     function safeColor(value) { return /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#4b8565'; }
     function displayRecords() {
       return records.map(record => pending.get(record.__backendId)?.desired || record);
@@ -1134,21 +1184,21 @@
         row.querySelector('.habit-progress').textContent = `${completed} of 7 days completed`;
         row.querySelector('.habit-goal').textContent = `${Math.max(1, Math.min(7, Number(record.habit_goal) || 5))}/7`;
         row.querySelectorAll('.day-button').forEach(button => {
-          const checked = !!record['day_' + button.dataset.day];
+          const checked = !!habitWeekState(record)[button.dataset.day];
           button.classList.toggle('checked', checked);
           button.setAttribute('aria-pressed', String(checked));
           button.setAttribute('aria-label', `${record.habit_name}, ${button.getAttribute('aria-label').split(',')[0]}, ${checked ? 'completed' : 'not completed'}`);
         });
         if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null);
       });
-      document.getElementById('empty-state').hidden = shown.length > 0;
+      document.getElementById('habit-empty-state').hidden = shown.length > 0;
       const done = shown.reduce((sum, r) => sum + countDone(r), 0);
       const goals = shown.reduce((sum, r) => sum + Math.max(1, Math.min(7, Number(r.habit_goal) || 5)), 0);
       document.getElementById('overall-score').textContent = `${goals ? Math.min(100, Math.round(done / goals * 100)) : 0}%`;
       document.getElementById('score-detail').textContent = `${Math.min(done, goals)} of ${goals} goal check-ins`;
       document.getElementById('done-count').textContent = done;
       document.getElementById('goals-count').textContent = shown.filter(r => countDone(r) >= Number(r.habit_goal)).length;
-      document.getElementById('remaining-count').textContent = shown.reduce((sum, r) => sum + Math.max(0, Number(r.habit_goal) - countDone(r)), 0);
+      document.getElementById('habit-remaining-count').textContent = shown.reduce((sum, r) => sum + Math.max(0, Number(r.habit_goal) - countDone(r)), 0);
     }
     function scheduleHabitSave(id) {
       const state = pending.get(id);
@@ -1165,7 +1215,7 @@
             return;
           }
           records = records.map(r => r.__backendId === id ? snapshot : r);
-          if (days.every(day => snapshot['day_' + day] === state.desired['day_' + day])) {
+          if (JSON.stringify(snapshot.weeks) === JSON.stringify(state.desired.weeks)) {
             pending.delete(id);
             render();
             return;
@@ -1187,7 +1237,12 @@
       if (button.classList.contains('day-button')) {
         const current = pending.get(id)?.desired || records.find(r => r.__backendId === id);
         if (!current) return;
-        const desired = { ...current, ['day_' + button.dataset.day]: !current['day_' + button.dataset.day] };
+        const weekKey = habitWeekKey();
+        const weeks = { ...(current.weeks || {}) };
+        const currentWeek = { ...(weeks[weekKey] || {}) };
+        currentWeek[button.dataset.day] = !currentWeek[button.dataset.day];
+        weeks[weekKey] = currentWeek;
+        const desired = { ...current, weeks };
         if (pending.has(id)) pending.get(id).desired = desired;
         else pending.set(id, { desired, saving:false });
         message('');
@@ -1217,15 +1272,13 @@
     form.addEventListener('submit', async event => {
       event.preventDefault();
       if (!initialized) { message('Connecting to your habits. Please try again shortly.'); return; }
-      if (records.length >= 999) { message('The 999-habit limit has been reached. Delete a habit before adding another.'); return; }
       const name = document.getElementById('habit-name').value.trim();
       const icon = document.getElementById('habit-icon').value.trim();
       if (!name || !icon) { message('Enter a habit name and icon.'); return; }
       const record = {
         habit_name:name, habit_icon:icon, habit_color:document.getElementById('habit-color').value,
         habit_goal:Number(document.getElementById('habit-goal').value),
-        day_mon:false, day_tue:false, day_wed:false, day_thu:false,
-        day_fri:false, day_sat:false, day_sun:false
+        weeks:{}
       };
       addButton.disabled = true;
       message('Saving habit…');
@@ -1239,8 +1292,14 @@
       } catch (_) { message('Could not add the habit. Please try again.'); }
       finally { addButton.disabled = false; }
     });
+    document.getElementById('habit-previous-week').addEventListener('click', () => shiftHabitWeek(-7));
+    document.getElementById('habit-current-week').addEventListener('click', () => {
+      habitVisibleMonday = habitMondayOf(new Date());
+      updateHabitWeek();
+    });
+    document.getElementById('habit-next-week').addEventListener('click', () => shiftHabitWeek(7));
     (async () => {
-      render();
+      updateHabitWeek();
       try {
         const result = await window.dataSdk.init({
           onDataChanged(data) {
@@ -1252,6 +1311,7 @@
         if (!result.isOk) message('Could not load your habits. Please refresh and try again.');
         else initialized = true;
       } catch (_) { message('Could not load your habits. Please refresh and try again.'); }
+    })();
     })();
   </script>
  
@@ -1286,12 +1346,9 @@
   </style>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.577.0/dist/umd/lucide.min.js" type="text/javascript"></script>
   <script src="https://cdn.tailwindcss.com/3.4.17" type="text/javascript"></script>
-  <script src="/_sdk/8fed440c6f94b5da.data_sdk.js" type="text/javascript" integrity="sha512-hrvcCCJ6nkL5gG3mdqPDbgyAf9a/fg/zBF51sU5N3rM1WmeSu8K36+6wn9TZeAZrLIonoaPBeVyFsXxXxZjq0w=="></script>
-  <script src="/_sdk/dc9eaed14b563eb8.editing_sdk.js" type="text/javascript" integrity="sha512-U1pSpFrQ86eOO8lqZ1xWYnEMHIYQODbWTwR3Q90z8aWFeEUSJieZRq+g7FYNvauPQ0rG84s3SFjWyB/NxzRXNA=="></script>
-  <script src="/_sdk/dfeb017e55db4863.resizing_sdk.js" type="text/javascript" integrity="sha512-kbPBNN/FAxsctln1jqNvXyIdF7mIhQx0C+eGGC2IF3mNjNZZcftDT1wFztswSSk4KXRWYHIC3uA9NMfJV4IVUw=="></script>
  </head>
  <body data-template-id="__page-root" class="w-full" style="background: rgb(255, 255, 255);">
-  <div class="shell w-full">
+  <div id="page-4" class="shell w-full">
    <header class="w-full border-b border-[#dbdfeb]">
     <div class="max-w-7xl mx-auto px-5 sm:px-8 py-6 flex flex-wrap gap-5 items-center justify-between">
      <div class="flex items-center gap-3">
@@ -1306,7 +1363,7 @@
       <p data-template-id="eyebrow" class="canva-text eyebrow text-xs font-bold text-[#da7b87] mb-3" style="color: rgb(218, 123, 135); font-weight: 700; font-style: normal; font-size: 12px;">YOUR LIFE, IN SEASON</p>
       <h1 id="page-title" data-template-id="page-title" class="canva-text leading-tight tracking-tight" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 32px;">Make room for what matters.</h1>
       <p data-template-id="intro" class="canva-text mt-3 text-[#69756d] max-w-xl" style="color: rgb(105, 117, 109); font-weight: 400; font-style: normal; font-size: 16px;">Track your money, make thoughtful plans, and celebrate your progress.</p>
-     </div><button id="open-form" data-template-id="add-button" type="button" class="canva-button bg-[#44362f] text-white rounded-xl px-5 py-3 font-semibold hover:bg-[#44362f] transition flex items-center gap-2" style="background: rgb(68, 54, 47); color: rgb(255, 255, 255);"><i data-lucide="plus" class="w-4 h-4" aria-hidden="true"></i><span data-template-id="add-button-text" class="canva-text" style="color: rgb(255, 255, 255); font-weight: 600; font-style: normal; font-size: 16px;">Add an entry</span></button>
+     </div><button id="quarter-open-form" data-template-id="add-button" type="button" class="canva-button bg-[#44362f] text-white rounded-xl px-5 py-3 font-semibold hover:bg-[#44362f] transition flex items-center gap-2" style="background: rgb(68, 54, 47); color: rgb(255, 255, 255);"><i data-lucide="plus" class="w-4 h-4" aria-hidden="true"></i><span data-template-id="add-button-text" class="canva-text" style="color: rgb(255, 255, 255); font-weight: 600; font-style: normal; font-size: 16px;">Add an entry</span></button>
     </section>
     <div class="rise flex flex-wrap items-center justify-between gap-4 mb-6" style="animation-delay:.08s">
      <div class="flex items-center gap-3">
@@ -1393,11 +1450,11 @@
     </div>
    </main>
    <div id="form-overlay" class="hidden fixed inset-0 z-20 bg-[#15251b]/55 p-4 overflow-y-auto" role="presentation">
-    <section role="dialog" aria-modal="true" aria-labelledby="form-heading" class="max-w-lg mx-auto my-6 sm:my-12 bg-[#fafbf7] rounded-2xl shadow-2xl p-6 sm:p-8">
+    <section role="dialog" aria-modal="true" aria-labelledby="quarter-form-heading" class="max-w-lg mx-auto my-6 sm:my-12 bg-[#fafbf7] rounded-2xl shadow-2xl p-6 sm:p-8">
      <div class="flex items-start justify-between gap-3 mb-6">
       <div>
        <p data-template-id="form-kicker" class="canva-text eyebrow text-xs font-bold text-[#78856e] mb-2" style="color: rgb(120, 133, 110); font-weight: 700; font-style: normal; font-size: 12px;">YOUR QUARTERLY NOTEBOOK</p>
-       <h2 id="form-heading" data-template-id="form-heading" class="canva-text" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 24px;">Add an entry</h2>
+       <h2 id="quarter-form-heading" data-template-id="form-heading" class="canva-text" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 24px;">Add an entry</h2>
       </div><button id="close-form" type="button" aria-label="Close entry form" class="rounded-lg p-2 hover:bg-[#e8eee6]"><i data-lucide="x" class="w-5 h-5"></i></button>
      </div>
      <form id="entry-form" class="space-y-4">
@@ -1413,7 +1470,7 @@
       <div><label data-template-id="notes-label" class="canva-text block text-sm font-semibold mb-2" for="entry-notes" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 14px;">Notes (optional)</label><textarea id="entry-notes" class="field min-h-[90px] resize-y" maxlength="500"></textarea>
       </div>
       <p id="form-error" role="alert" class="text-sm text-[#a44939]"></p>
-      <div class="flex gap-3 justify-end pt-2"><button id="cancel-form" data-template-id="cancel-button" class="canva-button rounded-xl px-5 py-3 border border-[#d3dacf] font-semibold hover:bg-[#eef2e9]" type="button" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 16px;">Cancel</button><button id="save-entry" data-template-id="save-button" class="canva-button rounded-xl px-5 py-3 bg-[#244b3d] text-white font-semibold hover:bg-[#35634f]" type="submit" style="background: rgb(36, 75, 61); color: rgb(255, 255, 255); font-weight: 600; font-style: normal; font-size: 16px;">Save entry</button>
+      <div class="flex gap-3 justify-end pt-2"><button id="quarter-cancel-form" data-template-id="cancel-button" class="canva-button rounded-xl px-5 py-3 border border-[#d3dacf] font-semibold hover:bg-[#eef2e9]" type="button" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 16px;">Cancel</button><button id="save-entry" data-template-id="save-button" class="canva-button rounded-xl px-5 py-3 bg-[#244b3d] text-white font-semibold hover:bg-[#35634f]" type="submit" style="background: rgb(36, 75, 61); color: rgb(255, 255, 255); font-weight: 600; font-style: normal; font-size: 16px;">Save entry</button>
       </div>
      </form>
     </section>
@@ -1459,7 +1516,7 @@
     $('form-overlay').classList.add('hidden');
     document.body.style.overflow = '';
     editing = null;
-    $('open-form').focus();
+    $('quarter-open-form').focus();
   }
   function makeEntry(record) {
     const row = document.createElement('div');
@@ -1540,9 +1597,9 @@
   }
   $('prev-quarter').addEventListener('click',()=>{quarterIndex--;render();});
   $('next-quarter').addEventListener('click',()=>{quarterIndex++;render();});
-  $('open-form').addEventListener('click',()=>openForm());
+  $('quarter-open-form').addEventListener('click',()=>openForm());
   $('close-form').addEventListener('click',closeForm);
-  $('cancel-form').addEventListener('click',closeForm);
+  $('quarter-cancel-form').addEventListener('click',closeForm);
   $('entry-type').addEventListener('change',syncFormType);
   $('form-overlay').addEventListener('click',e=>{if(e.target===$('form-overlay'))closeForm();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('form-overlay').classList.contains('hidden'))closeForm();});
@@ -1557,7 +1614,6 @@
     if((type==='credit'||type==='savings')&&(!raw||!Number.isFinite(Number(raw))||Number(raw)<0)){
       $('form-error').textContent='Enter a valid, non-negative dollar amount.';return;
     }
-    if(!editing&&records.length>=999){$('form-error').textContent='The 999-entry limit has been reached. Delete an entry to make room.';return;}
     const record={
       type,label,value:type==='achievement'||type==='idea'?'':raw,
       category:type==='goal'?$('entry-category').value:'',
@@ -1576,7 +1632,7 @@
       if(result.isOk){
         busy=false;
         closeForm();
-        say('Entry saved to your Canva Sheet.');
+        say('Entry saved to your database.');
       } else $('form-error').textContent='Could not save your entry. Please try again.';
     } catch { $('form-error').textContent='Could not save your entry. Please try again.'; }
     finally {busy=false;$('save-entry').disabled=false;$('save-entry').textContent='Save entry';}
@@ -1589,7 +1645,7 @@
       if(!result.isOk)throw new Error('Unable to connect');
       ready=true;
     } catch {
-      $('open-form').disabled=true;
+      $('quarter-open-form').disabled=true;
       say('Entries are unavailable right now. Please reload and try again.');
     }
   })();
@@ -1619,12 +1675,9 @@
   </style>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.577.0/dist/umd/lucide.min.js" type="text/javascript"></script>
   <script src="https://cdn.tailwindcss.com/3.4.17" type="text/javascript"></script>
-  <script src="/_sdk/8fed440c6f94b5da.data_sdk.js" type="text/javascript" integrity="sha512-hrvcCCJ6nkL5gG3mdqPDbgyAf9a/fg/zBF51sU5N3rM1WmeSu8K36+6wn9TZeAZrLIonoaPBeVyFsXxXxZjq0w=="></script>
-  <script src="/_sdk/dc9eaed14b563eb8.editing_sdk.js" type="text/javascript" integrity="sha512-U1pSpFrQ86eOO8lqZ1xWYnEMHIYQODbWTwR3Q90z8aWFeEUSJieZRq+g7FYNvauPQ0rG84s3SFjWyB/NxzRXNA=="></script>
-  <script src="/_sdk/dfeb017e55db4863.resizing_sdk.js" type="text/javascript" integrity="sha512-kbPBNN/FAxsctln1jqNvXyIdF7mIhQx0C+eGGC2IF3mNjNZZcftDT1wFztswSSk4KXRWYHIC3uA9NMfJV4IVUw=="></script>
  </head>
  <body data-template-id="__page-root" class="w-full m-0" style="background: rgb(255, 255, 255);">
-  <div class="app-wrapper">
+  <div id="page-5" class="app-wrapper">
    <header data-template-id="site-header" class="canva-header w-full px-5 sm:px-8 py-5 border-b border-[#dbdfeb]" style="background: rgb(255, 255, 255);">
     <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
      <div class="flex items-center gap-3">
@@ -1668,7 +1721,7 @@
       </div><span id="book-count" class="text-sm text-[#66736b]" aria-live="polite"></span>
      </div>
      <p id="storage-feedback" role="status" aria-live="polite" class="text-sm text-[#a4442c] min-h-5 mb-2"></p>
-     <div id="empty-state" data-template-id="empty-panel" class="canva-panel rounded-2xl border border-dashed border-[#d0efef] px-6 py-12 text-center" style="background: rgb(219, 223, 235);">
+     <div id="books-empty-state" data-template-id="empty-panel" class="canva-panel rounded-2xl border border-dashed border-[#d0efef] px-6 py-12 text-center" style="background: rgb(219, 223, 235);">
       <p data-template-id="empty-title" class="canva-text font-semibold mb-2" style="color: rgb(68, 54, 47); font-weight: 600; font-style: normal; font-size: 18px;">Your shelf starts here.</p>
       <p data-template-id="empty-copy" class="canva-text" style="color: rgb(68, 54, 47); font-weight: 400; font-style: normal; font-size: 16px;">Search for a book above and add your first read.</p>
      </div>
@@ -1680,6 +1733,7 @@
    </footer>
   </div>
   <script>
+  (() => {
   const resultsEl = document.getElementById('results');
   const shelfEl = document.getElementById('shelf');
   const searchFeedback = document.getElementById('search-feedback');
@@ -1738,7 +1792,6 @@
       add.addEventListener('click', async () => {
         if (!ready) { storageFeedback.textContent = 'Your shelf is unavailable right now. Please try again later.'; return; }
         if (alreadySaved()) return;
-        if (books.length >= 999) { storageFeedback.textContent = 'Your shelf has reached its 999-book limit. Remove a book to make space.'; return; }
         setBusy(add, true, 'Adding…');
         storageFeedback.textContent = '';
         try {
@@ -1756,7 +1809,7 @@
 
   function updateShelf(data) {
     books = [...data].sort((a, b) => (b.added_at || '').localeCompare(a.added_at || ''));
-    document.getElementById('empty-state').hidden = books.length > 0;
+    document.getElementById('books-empty-state').hidden = books.length > 0;
     document.getElementById('book-count').textContent = `${books.length} ${books.length === 1 ? 'book' : 'books'} on your shelf`;
     const current = new Map([...shelfEl.children].map(node => [node.dataset.recordId, node]));
     books.forEach(book => {
@@ -1879,6 +1932,7 @@
     } catch (_) {
       storageFeedback.textContent = 'Your shelf is unavailable right now. Please try again later.';
     }
+  })();
   })();
 </script>
  
