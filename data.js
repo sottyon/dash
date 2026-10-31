@@ -132,12 +132,9 @@
         return { isOk: false, error };
       }
     },
-    async sendSignInLink(email) {
+    async signInWithPassword(email, password) {
       try {
-        const { error } = await getClient().auth.signInWithOtp({
-          email,
-          options: { emailRedirectTo: `${location.origin}${location.pathname}` }
-        });
+        const { error } = await getClient().auth.signInWithPassword({ email, password });
         return { isOk: !error, error };
       } catch (error) {
         return { isOk: false, error };
@@ -161,13 +158,78 @@
     }
   };
 
+  function createDashboardSidebar(currentPage) {
+    const pages = [
+      { id: 1, title: 'Dashboard' },
+      { id: 2, title: 'Week At A Glance' },
+      { id: 6, title: 'Week in Depth' },
+      { id: 3, title: 'Habit Tracker' },
+      { id: 4, title: 'Quarterly Finance' },
+      { id: 5, title: 'Book Tracker' }
+    ];
+    const sidebar = document.createElement('aside');
+    sidebar.className = 'dashboard-sidebar';
+
+    const brand = document.createElement('div');
+    brand.className = 'dashboard-brand';
+    brand.textContent = 'daymark.';
+
+    const nav = document.createElement('nav');
+    nav.setAttribute('aria-label', 'Dashboard pages');
+    pages.filter(page => page.id !== currentPage).forEach(page => {
+      const link = document.createElement('a');
+      link.className = 'dashboard-page-link';
+      link.href = `#page-${page.id}`;
+      link.textContent = page.title;
+      nav.appendChild(link);
+    });
+
+    const signOut = document.createElement('button');
+    signOut.type = 'button';
+    signOut.className = 'dashboard-sign-out sign-out';
+    signOut.hidden = true;
+    signOut.textContent = 'Sign out';
+
+    const note = document.createElement('p');
+    note.className = 'dashboard-sidebar-note';
+    note.textContent = 'A little clarity for everything on your plate.';
+
+    sidebar.append(brand, nav, signOut, note);
+    return sidebar;
+  }
+
+  function setupDashboardNavigation() {
+    for (const pageNumber of [1, 2, 3, 4, 5, 6]) {
+      const page = document.getElementById(`page-${pageNumber}`);
+      if (!page) continue;
+
+      let layout = page;
+      if (pageNumber === 1) {
+        layout = page.parentElement;
+        if (!layout) continue;
+        layout.querySelector(':scope > aside')?.remove();
+      } else if (pageNumber === 6) {
+        page.querySelector(':scope > aside')?.remove();
+      } else {
+        const content = document.createElement('div');
+        content.className = 'dashboard-page-content';
+        while (page.firstChild) content.appendChild(page.firstChild);
+        page.appendChild(content);
+      }
+
+      layout.classList.add('dashboard-layout');
+      layout.prepend(createDashboardSidebar(pageNumber));
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
+    setupDashboardNavigation();
     const gate = document.getElementById('auth-gate');
     const form = document.getElementById('auth-form');
     const status = document.getElementById('auth-status');
     const submit = document.getElementById('auth-submit');
-    const signOut = document.getElementById('sign-out');
-    if (!gate || !form || !status || !submit || !signOut) return;
+    const signOutButtons = [...document.querySelectorAll('.sign-out')];
+    if (!gate || !form || !status || !submit || !signOutButtons.length) return;
 
     try {
       getClient();
@@ -175,7 +237,7 @@
       if (!sessionResult.isOk) throw sessionResult.error;
       if (sessionResult.session) {
         gate.hidden = true;
-        signOut.hidden = false;
+        signOutButtons.forEach(button => { button.hidden = false; });
         status.textContent = `Signed in as ${sessionResult.session.user.email}.`;
       } else {
         gate.hidden = false;
@@ -193,15 +255,21 @@
     form.addEventListener('submit', async event => {
       event.preventDefault();
       submit.disabled = true;
-      status.textContent = 'Sending sign-in link…';
-      const result = await window.dataSdk.sendSignInLink(document.getElementById('auth-email').value.trim());
-      status.textContent = result.isOk
-        ? 'Check your email for a secure sign-in link.'
-        : `Could not send sign-in link: ${result.error.message}`;
-      submit.disabled = false;
+      status.textContent = 'Signing in…';
+      const result = await window.dataSdk.signInWithPassword(
+        document.getElementById('auth-email').value.trim(),
+        document.getElementById('auth-password').value
+      );
+      if (result.isOk) {
+        status.textContent = 'Signed in. Loading your dashboard…';
+        location.reload();
+      } else {
+        status.textContent = `Could not sign in: ${result.error.message}`;
+        submit.disabled = false;
+      }
     });
 
-    signOut.addEventListener('click', async () => {
+    signOutButtons.forEach(signOut => signOut.addEventListener('click', async () => {
       signOut.disabled = true;
       const result = await window.dataSdk.signOut();
       if (!result.isOk) {
@@ -210,6 +278,6 @@
         return;
       }
       location.reload();
-    });
+    }));
   });
 })();
