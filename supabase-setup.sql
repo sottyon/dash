@@ -12,22 +12,42 @@ grant select, insert, update, delete on public.dashboard_records to authenticate
 
 alter table public.dashboard_records enable row level security;
 
+drop policy if exists "Users can read their own dashboard records" on public.dashboard_records;
+drop policy if exists "Users can create their own dashboard records" on public.dashboard_records;
+drop policy if exists "Users can update their own dashboard records" on public.dashboard_records;
+drop policy if exists "Users can delete their own dashboard records" on public.dashboard_records;
+
 create policy "Users can read their own dashboard records"
   on public.dashboard_records for select to authenticated
-  using ((select auth.uid()) = user_id);
+  using (
+    (select auth.uid()) = user_id
+    and coalesce((auth.jwt()->'amr') @> '[{"method":"password"}]'::jsonb, false)
+  );
 
 create policy "Users can create their own dashboard records"
   on public.dashboard_records for insert to authenticated
-  with check ((select auth.uid()) = user_id);
+  with check (
+    (select auth.uid()) = user_id
+    and coalesce((auth.jwt()->'amr') @> '[{"method":"password"}]'::jsonb, false)
+  );
 
 create policy "Users can update their own dashboard records"
   on public.dashboard_records for update to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
+  using (
+    (select auth.uid()) = user_id
+    and coalesce((auth.jwt()->'amr') @> '[{"method":"password"}]'::jsonb, false)
+  )
+  with check (
+    (select auth.uid()) = user_id
+    and coalesce((auth.jwt()->'amr') @> '[{"method":"password"}]'::jsonb, false)
+  );
 
 create policy "Users can delete their own dashboard records"
   on public.dashboard_records for delete to authenticated
-  using ((select auth.uid()) = user_id);
+  using (
+    (select auth.uid()) = user_id
+    and coalesce((auth.jwt()->'amr') @> '[{"method":"password"}]'::jsonb, false)
+  );
 
 do $$
 begin

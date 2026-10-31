@@ -79,6 +79,24 @@
     .auth-card button { margin-top:14px; }
     .auth-status { min-height:24px; font-size:13px; font-weight:600; }
     .nav-item { display:block; text-decoration:none; }
+    .dashboard-layout.dashboard-layout { display:grid; grid-template-columns:235px minmax(0,1fr); align-items:stretch; width:100%; min-height:100vh; }
+    .dashboard-sidebar { min-width:0; display:flex; flex-direction:column; gap:28px; padding:32px 22px; background:#44362f; color:#fff; }
+    .dashboard-brand { font-size:20px; font-weight:700; letter-spacing:-.04em; }
+    .dashboard-sidebar nav { display:flex; flex-direction:column; gap:8px; }
+    .dashboard-page-link { display:block; padding:11px 12px; border-radius:10px; color:#fff; text-decoration:none; font-weight:600; }
+    .dashboard-page-link:hover, .dashboard-page-link:focus-visible { background:#5a493f; }
+    .dashboard-sign-out { margin-top:auto; padding:10px 12px; border:1px solid #b5c6b8; border-radius:9px; background:transparent; color:#fff; font-weight:600; text-align:left; }
+    .dashboard-sign-out[hidden] { display:none; }
+    .dashboard-sidebar-note { margin-top:auto; color:#d5c9c2; font-size:12px; line-height:1.6; }
+    .dashboard-page-content { min-width:0; }
+    @media(max-width:850px) {
+      .dashboard-layout.dashboard-layout { grid-template-columns:minmax(0,1fr); }
+      .dashboard-sidebar { flex-direction:row; align-items:center; gap:14px; padding:14px 18px; }
+      .dashboard-brand, .dashboard-sidebar-note { display:none; }
+      .dashboard-sidebar nav { min-width:0; flex:1; flex-direction:row; overflow-x:auto; }
+      .dashboard-page-link { flex:none; white-space:nowrap; }
+      .dashboard-sign-out { flex:none; margin:0; }
+    }
     @media(max-width:850px) { .app-shell{grid-template-columns:1fr} .side{padding:16px 22px; flex-direction:row; align-items:center; gap:16px} .side-foot{display:none} .main-area{padding:30px 20px 60px} }
     @media(max-width:650px) { .columns{grid-template-columns:1fr} .stats{gap:8px} .stat{padding:15px;min-height:110px} .stat-number{font-size:34px} .form-grid{grid-template-columns:1fr} .topline{align-items:start} .primary{padding:11px} .priority{display:none} }
   </style>
@@ -96,9 +114,9 @@
     <nav aria-label="Dashboard navigation">
      <div class="side-link"><i data-lucide="layout-dashboard" aria-hidden="true" class="w-4 h-4"></i><span data-template-id="nav-dashboard" class="canva-text">Dashboard</span>
      </div>
-     <div class="flex flex-col gap-2 mt-3"><a href="#page-1" data-template-id="nav-page-1" class="canva-button side-link">Dashboard</a> <a href="#page-2" data-template-id="nav-page-2" class="canva-button side-link">Week At A Glance</a> <a href="#page-6" data-template-id="nav-page-6" class="canva-button side-link">Week in Depth</a> <a href="#page-3" data-template-id="nav-page-3" class="canva-button side-link">Habit Tracker</a> <a href="#page-4" data-template-id="nav-page-4" class="canva-button side-link">Quarterly Finance</a> <a href="#page-5" data-template-id="nav-page-5" class="canva-button side-link">Book Tracker</a>
+     <div class="flex flex-col gap-2 mt-3"><a href="#page-2" data-template-id="nav-page-2" class="canva-button side-link">Week At A Glance</a> <a href="#page-6" data-template-id="nav-page-6" class="canva-button side-link">Week in Depth</a> <a href="#page-3" data-template-id="nav-page-3" class="canva-button side-link">Habit Tracker</a> <a href="#page-4" data-template-id="nav-page-4" class="canva-button side-link">Quarterly Finance</a> <a href="#page-5" data-template-id="nav-page-5" class="canva-button side-link">Book Tracker</a>
      </div>
-     <button id="sign-out" type="button" class="side-link secondary" hidden>Sign out</button>
+     <button type="button" class="side-link secondary sign-out" hidden>Sign out</button>
     </nav>
     <p data-template-id="sidebar-note" class="canva-text side-foot">A little clarity for everything on your plate.</p>
    </aside>
@@ -168,11 +186,13 @@
    <div class="auth-card">
     <p class="eyebrow">Private dashboard</p>
     <h2 id="auth-heading">Sign in to save your data</h2>
-    <p id="auth-description">Use your email to receive a secure sign-in link. Your dashboard data is private to your account.</p>
+    <p id="auth-description">Sign in with your email and password. Your dashboard data is private to your account.</p>
     <form id="auth-form">
      <label for="auth-email">Email address</label>
-     <input id="auth-email" type="email" autocomplete="email" required>
-     <button id="auth-submit" type="submit" class="primary">Email me a sign-in link</button>
+     <input id="auth-email" type="email" autocomplete="username" required>
+     <label for="auth-password">Password</label>
+     <input id="auth-password" type="password" autocomplete="current-password" required>
+     <button id="auth-submit" type="submit" class="primary">Sign in</button>
     </form>
     <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
    </div>
