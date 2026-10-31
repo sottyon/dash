@@ -167,6 +167,32 @@
         return { isOk: false, error };
       }
     },
+    async requestPasswordReset(email) {
+      try {
+        const { error } = await getClient().auth.resetPasswordForEmail(email, {
+          redirectTo: `${location.origin}${location.pathname}`
+        });
+        return { isOk: !error, error };
+      } catch (error) {
+        return { isOk: false, error };
+      }
+    },
+    async updatePassword(password) {
+      try {
+        const { error } = await getClient().auth.updateUser({ password });
+        return { isOk: !error, error };
+      } catch (error) {
+        return { isOk: false, error };
+      }
+    },
+    onAuthStateChange(callback) {
+      try {
+        const { data: { subscription } } = getClient().auth.onAuthStateChange(callback);
+        return { isOk: true, subscription };
+      } catch (error) {
+        return { isOk: false, error };
+      }
+    },
     async signOut() {
       try {
         const { error } = await getClient().auth.signOut();
@@ -259,24 +285,53 @@
     setupDashboardNavigation();
     const gate = document.getElementById('auth-gate');
     const form = document.getElementById('auth-form');
+    const resetRequestForm = document.getElementById('password-reset-request-form');
+    const newPasswordForm = document.getElementById('new-password-form');
     const status = document.getElementById('auth-status');
     const submit = document.getElementById('auth-submit');
     const signOutButtons = [...document.querySelectorAll('.sign-out')];
-    if (!gate || !form || !status || !submit || !signOutButtons.length) return;
+    if (!gate || !form || !resetRequestForm || !newPasswordForm || !status || !submit || !signOutButtons.length) return;
+    let passwordRecovery = false;
+
+    function showAuthForm(mode) {
+      gate.hidden = false;
+      form.hidden = mode !== 'login';
+      resetRequestForm.hidden = mode !== 'request-reset';
+      newPasswordForm.hidden = mode !== 'set-password';
+      status.textContent = '';
+      document.getElementById('auth-heading').textContent =
+        mode === 'set-password' ? 'Choose a new password' :
+        mode === 'request-reset' ? 'Reset your password' :
+        'Sign in to save your data';
+      document.getElementById('auth-description').textContent =
+        mode === 'set-password' ? 'Choose a new password for your dashboard account.' :
+        mode === 'request-reset' ? 'Enter your account email and we’ll send a password reset link.' :
+        'Sign in with your email and password. Your dashboard data is private to your account.';
+    }
+
+    const authState = window.dataSdk.onAuthStateChange(event => {
+      if (event === 'PASSWORD_RECOVERY') {
+        passwordRecovery = true;
+        showAuthForm('set-password');
+      }
+    });
+    if (!authState.isOk) {
+      status.textContent = `Could not initialize password recovery: ${authState.error.message}`;
+    }
 
     try {
       getClient();
       const sessionResult = await window.dataSdk.getSession();
       if (!sessionResult.isOk) throw sessionResult.error;
-      if (sessionResult.session) {
+      if (sessionResult.session && !passwordRecovery) {
         gate.hidden = true;
         signOutButtons.forEach(button => { button.hidden = false; });
         status.textContent = `Signed in as ${sessionResult.session.user.email}.`;
       } else {
-        gate.hidden = false;
+        showAuthForm(passwordRecovery ? 'set-password' : 'login');
       }
     } catch (error) {
-      gate.hidden = false;
+      showAuthForm('login');
       status.textContent = error.message;
       form.hidden = true;
       const config = window.SUPABASE_CONFIG || {};
@@ -300,6 +355,56 @@
         status.textContent = `Could not sign in: ${result.error.message}`;
         submit.disabled = false;
       }
+    });
+
+    document.getElementById('forgot-password').addEventListener('click', () => {
+      document.getElementById('reset-email').value = document.getElementById('auth-email').value.trim();
+      showAuthForm('request-reset');
+    });
+    document.getElementById('back-to-login-from-reset').addEventListener('click', () => showAuthForm('login'));
+    document.getElementById('back-to-login-from-password').addEventListener('click', async () => {
+      passwordRecovery = false;
+      await window.dataSdk.signOut();
+      showAuthForm('login');
+    });
+    resetRequestForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const email = document.getElementById('reset-email').value.trim();
+      const resetSubmit = document.getElementById('reset-submit');
+      resetSubmit.disabled = true;
+      status.textContent = 'Sending password reset email…';
+      const result = await window.dataSdk.requestPasswordReset(email);
+      status.textContent = result.isOk
+        ? 'If an account exists for that email, a password reset link has been sent.'
+        : `Could not send the reset email: ${result.error.message}`;
+      resetSubmit.disabled = false;
+    });
+    newPasswordForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const password = document.getElementById('new-password').value;
+      const confirmation = document.getElementById('confirm-password').value;
+      if (password !== confirmation) {
+        status.textContent = 'The passwords do not match.';
+        return;
+      }
+      const passwordSubmit = document.getElementById('new-password-submit');
+      passwordSubmit.disabled = true;
+      status.textContent = 'Updating your password…';
+      const result = await window.dataSdk.updatePassword(password);
+      if (!result.isOk) {
+        status.textContent = `Could not update your password: ${result.error.message}`;
+        passwordSubmit.disabled = false;
+        return;
+      }
+      const signOutResult = await window.dataSdk.signOut();
+      if (!signOutResult.isOk) {
+        status.textContent = 'Password updated. Reload this page, then sign in with your new password.';
+        passwordSubmit.disabled = false;
+        return;
+      }
+      passwordRecovery = false;
+      status.textContent = 'Password updated. Sign in with your new password.';
+      location.replace(`${location.pathname}${location.search}`);
     });
 
     signOutButtons.forEach(signOut => signOut.addEventListener('click', async () => {

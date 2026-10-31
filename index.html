@@ -279,6 +279,21 @@
      <label for="auth-password">Password</label>
      <input id="auth-password" type="password" autocomplete="current-password" required>
      <button id="auth-submit" type="submit" class="primary">Sign in</button>
+     <button id="forgot-password" type="button" class="text-sm underline">Forgot password?</button>
+    </form>
+    <form id="password-reset-request-form" hidden>
+     <label for="reset-email">Email address</label>
+     <input id="reset-email" type="email" autocomplete="email" required>
+     <button id="reset-submit" type="submit" class="primary">Send reset link</button>
+     <button id="back-to-login-from-reset" type="button" class="text-sm underline">Back to sign in</button>
+    </form>
+    <form id="new-password-form" hidden>
+     <label for="new-password">New password</label>
+     <input id="new-password" type="password" autocomplete="new-password" minlength="8" required>
+     <label for="confirm-password">Confirm new password</label>
+     <input id="confirm-password" type="password" autocomplete="new-password" minlength="8" required>
+     <button id="new-password-submit" type="submit" class="primary">Save new password</button>
+     <button id="back-to-login-from-password" type="button" class="text-sm underline">Back to sign in</button>
     </form>
     <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
    </div>

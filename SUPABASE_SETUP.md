@@ -6,9 +6,12 @@ The dashboard is a static GitHub Pages site. Supabase stores records across week
 2. In the Supabase SQL Editor, run `supabase-setup.sql`.
 3. Copy the project URL and the project's publishable key (or legacy `anon` key) into `url` and `anonKey` in `supabase-config.js`. These browser keys are public; row-level security in the SQL script restricts data to the signed-in user. Never put a `service_role` key in this site.
 4. In Supabase Authentication settings, disable public sign-ups so visitors cannot create new accounts.
-5. Set a password for your existing account in Supabase Authentication, then sign in on the site with that account's email and password. The dashboard does not provide sign-up or passwordless sign-in.
-6. Publish the files to GitHub Pages and open the site.
-7. On your iPhone, open the dashboard link in Safari, tap **Share**, then **Add to Home Screen**. Launch the new Daymark icon for an app-like full-screen view.
+5. In **Authentication > URL Configuration**, set the Site URL to `https://sottyon.github.io/dash/` and add that same URL to the allowed redirect URLs.
+6. Set a password for your existing Supabase account, then sign in on the site with that account's email and password. The dashboard does not provide sign-up or passwordless sign-in. Your GitHub password is separate from your Supabase dashboard password.
+7. Publish the files to GitHub Pages and open the site.
+8. On your iPhone, open the dashboard link in Safari, tap **Share**, then **Add to Home Screen**. Launch the new Daymark icon for an app-like full-screen view.
+
+If you cannot sign in, use **Forgot password?** on the dashboard login form. Supabase sends a recovery link to the account email; open it in the browser, choose a new password, then return to the dashboard and sign in. The redirect URL in step 5 must be allowed for the recovery link to return to the site.
 
 The installed app and website use the same Supabase account and records. Changes sync through Supabase Realtime; the app refreshes records when a connection returns or you reopen it. Database edits require an internet connection and are not queued while offline.
 
