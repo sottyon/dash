@@ -4,6 +4,13 @@
   let activeUserId;
   let realtimeChannel;
 
+  function setSyncStatus(text, connected = false) {
+    document.querySelectorAll('.dashboard-sync-status').forEach(status => {
+      status.textContent = text;
+      status.dataset.connected = String(connected);
+    });
+  }
+
   function getClient() {
     if (client) return client;
     const config = window.SUPABASE_CONFIG || {};
@@ -61,8 +68,28 @@
           if (status) status.textContent = `Could not refresh saved data: ${error.message}`;
         });
       })
-      .subscribe();
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          setSyncStatus('Live sync connected', true);
+          refreshRecords().catch(() => setSyncStatus('Could not refresh saved data'));
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setSyncStatus(navigator.onLine ? 'Reconnecting to live sync…' : 'Offline — reconnecting when online');
+        }
+      });
   }
+
+  window.addEventListener('online', () => {
+    if (!activeUserId) return;
+    setSyncStatus('Reconnecting to live sync…');
+    refreshRecords().catch(() => setSyncStatus('Could not refresh saved data'));
+  });
+  window.addEventListener('offline', () => {
+    if (activeUserId) setSyncStatus('Offline — reconnecting when online');
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !activeUserId) return;
+    refreshRecords().catch(() => setSyncStatus('Could not refresh saved data'));
+  });
 
   async function saveRecord(record, id) {
     const user = await getCurrentUser();
@@ -195,6 +222,12 @@
     note.textContent = 'A little clarity for everything on your plate.';
 
     sidebar.append(brand, nav, signOut, note);
+    const syncStatus = document.createElement('p');
+    syncStatus.className = 'dashboard-sync-status';
+    syncStatus.setAttribute('role', 'status');
+    syncStatus.setAttribute('aria-live', 'polite');
+    syncStatus.textContent = 'Connecting to live sync…';
+    sidebar.insertBefore(syncStatus, note);
     return sidebar;
   }
 
