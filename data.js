@@ -6,6 +6,7 @@
   let refreshQueue = Promise.resolve();
   let writeQueue = Promise.resolve();
   let syncPromise;
+  let recordRevision = 0;
   let offlineDbPromise;
   const offlineDbName = 'daymark-dashboard-offline';
 
@@ -32,14 +33,26 @@
     });
   }
 
-  async function writeOfflineState(state) {
+  async function updateOfflineState(userId, update) {
     const db = await openOfflineDb();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction('users', 'readwrite');
-      transaction.objectStore('users').put(state);
-      transaction.oncomplete = () => resolve();
+      const store = transaction.objectStore('users');
+      const request = store.get(userId);
+      let updatedState;
+      let updateError;
+      request.onsuccess = () => {
+        try {
+          updatedState = update(request.result || { userId, records: [], pending: [] });
+          store.put(updatedState);
+        } catch (error) {
+          updateError = error;
+          transaction.abort();
+        }
+      };
+      transaction.oncomplete = () => resolve(updatedState);
       transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error || new Error('Could not save offline dashboard data.'));
+      transaction.onabort = () => reject(updateError || transaction.error || new Error('Could not save offline dashboard data.'));
     });
   }
 
@@ -85,30 +98,38 @@
 
   function refreshRecords() {
     const request = refreshQueue.catch(() => {}).then(async () => {
-      const records = [];
-      const pageSize = 1000;
-      for (let offset = 0; ; offset += pageSize) {
-        const { data, error } = await getClient()
-          .from('dashboard_records')
-          .select('id, record')
-          .order('created_at', { ascending: true })
-          .range(offset, offset + pageSize - 1);
-        if (error) throw error;
-        records.push(...data.map(toRecord));
-        if (data.length < pageSize) break;
-      }
-      if (!activeUserId) {
-        callbacks.forEach(callback => callback(records));
-        return;
-      }
-      try {
-        const state = await readOfflineState(activeUserId);
-        state.records = records;
-        await writeOfflineState(state);
+      while (true) {
+        const revision = recordRevision;
+        const userId = activeUserId;
+        const records = [];
+        const pageSize = 1000;
+        for (let offset = 0; ; offset += pageSize) {
+          const { data, error } = await getClient()
+            .from('dashboard_records')
+            .select('id, record')
+            .order('created_at', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          if (error) throw error;
+          records.push(...data.map(toRecord));
+          if (data.length < pageSize) break;
+        }
+        if (revision !== recordRevision || userId !== activeUserId) continue;
+        if (!userId) {
+          callbacks.forEach(callback => callback(records));
+          return;
+        }
+        let state;
+        try {
+          state = await updateOfflineState(userId, current => ({ ...current, records }));
+        } catch (error) {
+          if (revision !== recordRevision || userId !== activeUserId) continue;
+          setSyncStatus(`Offline cache unavailable: ${errorMessage(error)}`);
+          callbacks.forEach(callback => callback(records));
+          return;
+        }
+        if (revision !== recordRevision || userId !== activeUserId) continue;
         callbacks.forEach(callback => callback(applyPendingRecords(records, state.pending)));
-      } catch (error) {
-        setSyncStatus(`Offline cache unavailable: ${errorMessage(error)}`);
-        callbacks.forEach(callback => callback(records));
+        return;
       }
     });
     refreshQueue = request;
@@ -153,21 +174,23 @@
   }
 
   async function queueOfflineOperation(userId, operation) {
-    const state = await readOfflineState(userId);
-    if (operation.type === 'update') {
-      let existing = -1;
-      for (let index = state.pending.length - 1; index >= 0; index--) {
-        if (state.pending[index].type === 'update' && state.pending[index].id === operation.id) {
-          existing = index;
-          break;
+    const state = await updateOfflineState(userId, current => {
+      const pending = [...current.pending];
+      if (operation.type === 'update') {
+        let existing = -1;
+        for (let index = pending.length - 1; index >= 0; index--) {
+          if (pending[index].type === 'update' && pending[index].id === operation.id) {
+            existing = index;
+            break;
+          }
         }
+        if (existing >= 0) pending[existing] = operation;
+        else pending.push(operation);
+      } else {
+        pending.push(operation);
       }
-      if (existing >= 0) state.pending[existing] = operation;
-      else state.pending.push(operation);
-    } else {
-      state.pending.push(operation);
-    }
-    await writeOfflineState(state);
+      return { ...current, pending };
+    });
     await publishOfflineState(userId);
     setSyncStatus(`Saved on this device — ${state.pending.length} change${state.pending.length === 1 ? '' : 's'} waiting for internet`);
     return { isOk: true, queued: true };
@@ -209,20 +232,23 @@
         const operation = state.pending[0];
         try {
           const remoteId = await sendOperation(userId, operation);
-          if (operation.type === 'create') {
-            const syncedRecord = { ...operation.record, __backendId: remoteId };
-            state.records.push(syncedRecord);
-            state.pending = state.pending.slice(1).map(item => item.id === operation.id
-              ? { ...item, id: remoteId, record: item.record ? { ...item.record, __backendId: remoteId } : undefined }
-              : item);
-          } else if (operation.type === 'update') {
-            state.records = state.records.map(record => record.__backendId === operation.id ? operation.record : record);
-            state.pending = state.pending.slice(1);
-          } else {
-            state.records = state.records.filter(record => record.__backendId !== operation.id);
-            state.pending = state.pending.slice(1);
-          }
-          await writeOfflineState(state);
+          recordRevision++;
+          state = await updateOfflineState(userId, current => {
+            let records = [...current.records];
+            let pending = current.pending.slice(1);
+            if (operation.type === 'create') {
+              records = records.filter(record => record.__backendId !== remoteId);
+              records.push({ ...operation.record, __backendId: remoteId });
+              pending = pending.map(item => item.id === operation.id
+                ? { ...item, id: remoteId, record: item.record ? { ...item.record, __backendId: remoteId } : undefined }
+                : item);
+            } else if (operation.type === 'update') {
+              records = records.map(record => record.__backendId === operation.id ? operation.record : record);
+            } else {
+              records = records.filter(record => record.__backendId !== operation.id);
+            }
+            return { ...current, records, pending };
+          });
           callbacks.forEach(callback => callback(applyPendingRecords(state.records, state.pending)));
         } catch (error) {
           if (isNetworkError(error)) {
@@ -249,6 +275,7 @@
   function subscribeToChanges(userId) {
     if (realtimeChannel && activeUserId === userId) return;
     if (realtimeChannel) getClient().removeChannel(realtimeChannel);
+    if (activeUserId !== userId) recordRevision++;
     activeUserId = userId;
     realtimeChannel = getClient()
       .channel(`dashboard-records-${userId}`)
@@ -258,6 +285,7 @@
         table: 'dashboard_records',
         filter: `user_id=eq.${userId}`
       }, () => {
+        recordRevision++;
         refreshRecords().catch(reportRefreshFailure);
       })
       .subscribe(status => {
@@ -319,15 +347,15 @@
         }
         return reportWriteFailure(error);
       }
+      recordRevision++;
       setSyncStatus('Saved to Supabase', true);
       try {
-        const state = await readOfflineState(user.id);
-        if (operation.type === 'create') {
-          state.records.push({ ...operation.record, __backendId: resultId });
-        } else {
-          state.records = state.records.map(saved => saved.__backendId === resultId ? operation.record : saved);
-        }
-        await writeOfflineState(state);
+        await updateOfflineState(user.id, state => {
+          const records = state.records.filter(saved => saved.__backendId !== resultId);
+          if (operation.type === 'create') records.push({ ...operation.record, __backendId: resultId });
+          else records.push(operation.record);
+          return { ...state, records };
+        });
       } catch (error) {
         setSyncStatus(`Saved to Supabase, but offline cache failed: ${errorMessage(error)}`);
       }
@@ -350,7 +378,6 @@
       callbacks.add(onDataChanged);
       try {
         const user = await getCurrentUser();
-        activeUserId = user.id;
         subscribeToChanges(user.id);
         try {
           await refreshRecords();
@@ -404,11 +431,13 @@
           }
           return reportWriteFailure(error);
         }
+        recordRevision++;
         setSyncStatus('Saved to Supabase', true);
         try {
-          const state = await readOfflineState(user.id);
-          state.records = state.records.filter(saved => saved.__backendId !== operation.id);
-          await writeOfflineState(state);
+          await updateOfflineState(user.id, state => ({
+            ...state,
+            records: state.records.filter(saved => saved.__backendId !== operation.id)
+          }));
         } catch (error) {
           setSyncStatus(`Saved to Supabase, but offline cache failed: ${errorMessage(error)}`);
         }
