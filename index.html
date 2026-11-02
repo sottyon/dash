@@ -189,6 +189,8 @@
   <script src="https://cdn.tailwindcss.com/3.4.17" type="text/javascript"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./supabase-config.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="./google-calendar.js"></script>
   <script src="./data.js"></script>
  </head>
  <body data-template-id="__page-root" style="background: rgb(255, 255, 255);">
@@ -553,11 +555,32 @@
        <div>
         <p data-template-id="calendar-kicker" class="canva-text eyebrow mb-2" style="color: rgb(71, 105, 80); font-weight: 700; font-style: normal; font-size: 15px;">06 / CALENDAR</p>
         <h2 data-template-id="calendar-heading" class="canva-text display mb-2" style="color: rgb(40, 53, 45); font-weight: 600; font-style: normal; font-size: 23px;">This week on the calendar</h2>
-        <p data-template-id="calendar-description" class="canva-text" style="color: rgb(119, 128, 120); font-weight: 400; font-style: normal; font-size: 15px;">Your scheduled events, alongside your weekly plan.</p>
+        <p data-template-id="calendar-description" class="canva-text" style="color: rgb(119, 128, 120); font-weight: 400; font-style: normal; font-size: 15px;">Your primary Google Calendar, alongside your weekly plan.</p>
        </div>
        <p data-template-id="calendar-legend" class="canva-text text-sm" style="color: rgb(71, 105, 80); font-weight: 600; font-style: normal; font-size: 15px;">Pink = timed · Aqua = all day</p>
       </div>
+      <div class="mt-4 flex flex-wrap gap-2">
+       <button id="calendar-connect" type="button" class="rounded-lg bg-[#476950] px-4 py-2 text-sm font-semibold text-white">Connect Google Calendar</button>
+       <button id="calendar-add-event" type="button" class="rounded-lg bg-[#476950] px-4 py-2 text-sm font-semibold text-white" hidden>Add event</button>
+       <button id="calendar-refresh" type="button" class="rounded-lg border border-[#dbdfeb] bg-white px-4 py-2 text-sm" disabled>Refresh</button>
+       <button id="calendar-disconnect" type="button" class="rounded-lg border border-[#dbdfeb] bg-white px-4 py-2 text-sm" hidden>Disconnect</button>
+      </div>
+      <p id="calendar-status" class="mt-2 min-h-5 text-sm" role="status" aria-live="polite"></p>
       <div id="calendar-week" class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7"></div>
+      <form id="calendar-event-form" class="mt-5 grid gap-3 rounded-xl border border-[#dbdfeb] bg-[#fafbf8] p-4 sm:grid-cols-2" hidden>
+       <h3 id="calendar-form-heading" class="text-base font-semibold sm:col-span-2">Add an event to Google Calendar</h3>
+       <label class="grid gap-1 text-sm font-medium sm:col-span-2">Event title<input id="calendar-event-title" class="rounded-lg border border-[#dbdfeb] bg-white px-3 py-2" maxlength="160" required></label>
+       <label class="grid gap-1 text-sm font-medium sm:col-span-2">Description (optional)<textarea id="calendar-event-description" class="rounded-lg border border-[#dbdfeb] bg-white px-3 py-2" rows="2" maxlength="2000"></textarea></label>
+       <label class="grid gap-1 text-sm font-medium">Start date<input id="calendar-event-start-date" class="rounded-lg border border-[#dbdfeb] bg-white px-3 py-2" type="date" required></label>
+       <label class="grid gap-1 text-sm font-medium">End date<input id="calendar-event-end-date" class="rounded-lg border border-[#dbdfeb] bg-white px-3 py-2" type="date" required></label>
+       <label class="grid gap-1 text-sm font-medium">Start time<input id="calendar-event-start-time" class="rounded-lg border border-[#dbdfeb] bg-white px-3 py-2" type="time" required></label>
+       <label class="grid gap-1 text-sm font-medium">End time<input id="calendar-event-end-time" class="rounded-lg border border-[#dbdfeb] bg-white px-3 py-2" type="time" required></label>
+       <label class="flex items-center gap-2 text-sm font-medium sm:col-span-2"><input id="calendar-event-all-day" type="checkbox"> All-day event</label>
+       <div class="flex flex-wrap gap-2 sm:col-span-2">
+        <button id="calendar-event-save" type="submit" class="rounded-lg bg-[#476950] px-4 py-2 text-sm font-semibold text-white">Save event</button>
+        <button id="calendar-event-cancel" type="button" class="rounded-lg border border-[#dbdfeb] bg-white px-4 py-2 text-sm">Cancel</button>
+       </div>
+      </form>
      </section>
      <p id="planner-status" class="mt-5 min-h-[24px] text-sm font-medium" role="status" aria-live="polite"></p>
     </main>
@@ -575,19 +598,13 @@
     (() => {
     const sections = ["goal", "task", "gym"];
     const notes = ["focus", "reflection", "reading"];
-    const calendarEvents = [
-      { date:"2026-11-01", title:"Flea/tick and heart worm tomorrow", start:"12:55", end:"13:55" },
-      { date:"2026-11-08", title:"Flea/tick and heart worm today", start:"09:55", end:"10:55" },
-      { date:"2026-11-11", title:"Flea/tick and heart worm tomorrow", start:"20:55", end:"21:55" },
-      { date:"2026-10-31", title:"Halloween", allDay:true, calendar:"Holidays in United States" },
-      { date:"2026-11-01", title:"Daylight Saving Time ends", allDay:true, calendar:"Holidays in United States" },
-      { date:"2026-11-03", title:"Election Day", allDay:true, calendar:"Holidays in United States" },
-      { date:"2026-11-11", title:"Veterans Day", allDay:true, calendar:"Holidays in United States" }
-    ];
+    let calendarEvents = [];
+    let editingCalendarEvent = null;
     const records = new Map();
     const pendingToggles = new Map();
     let ready = false;
     let visibleMonday = mondayOf(new Date());
+    let calendarLoadId = 0;
     let lastWriteAt = 0;
     let writeChain = Promise.resolve();
 
@@ -605,6 +622,11 @@
       el.textContent = message;
       el.style.color = error ? "#a1473f" : "#476950";
     }
+    function showCalendarStatus(message, error = false) {
+      const el = document.getElementById("calendar-status");
+      el.textContent = message;
+      el.style.color = error ? "#a1473f" : "#476950";
+    }
     function scheduleWrite(operation) {
       const job = writeChain.catch(() => {}).then(async () => {
         const remaining = 550 - (Date.now() - lastWriteAt);
@@ -619,6 +641,93 @@
       return [...records.values()].filter(row => row.week_start === weekKey() && row.section === section)
         .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
     }
+    function calendarEventDate(event) {
+      return event.start?.date || (event.start?.dateTime ? isoDay(new Date(event.start.dateTime)) : "");
+    }
+    function calendarEventTime(value) {
+      return value?.dateTime ? new Date(value.dateTime).toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" }) : "";
+    }
+    function localDateTimeValue(value) {
+      const date = new Date(value);
+      return `${isoDay(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    }
+    function calendarForm() {
+      return document.getElementById("calendar-event-form");
+    }
+    function resetCalendarForm() {
+      const form = calendarForm();
+      form.reset();
+      form.hidden = true;
+      editingCalendarEvent = null;
+      document.getElementById("calendar-form-heading").textContent = "Add an event to Google Calendar";
+      document.getElementById("calendar-event-save").textContent = "Save event";
+      document.getElementById("calendar-event-start-time").disabled = false;
+      document.getElementById("calendar-event-end-time").disabled = false;
+      document.getElementById("calendar-event-start-time").required = true;
+      document.getElementById("calendar-event-end-time").required = true;
+    }
+    function editCalendarEvent(event) {
+      editingCalendarEvent = event;
+      const form = calendarForm();
+      form.hidden = false;
+      document.getElementById("calendar-form-heading").textContent = "Edit Google Calendar event";
+      document.getElementById("calendar-event-save").textContent = "Update event";
+      document.getElementById("calendar-event-title").value = event.summary || "";
+      document.getElementById("calendar-event-description").value = event.description || "";
+      const allDay = !event.start?.dateTime;
+      document.getElementById("calendar-event-all-day").checked = allDay;
+      document.getElementById("calendar-event-start-date").value = calendarEventDate(event);
+      const eventEndDate = event.end?.date || (event.end?.dateTime ? isoDay(new Date(event.end.dateTime)) : calendarEventDate(event));
+      const lastDay = new Date(`${eventEndDate}T00:00:00`);
+      if (allDay) lastDay.setDate(lastDay.getDate() - 1);
+      document.getElementById("calendar-event-end-date").value = allDay ? isoDay(lastDay) : eventEndDate;
+      document.getElementById("calendar-event-start-time").value = allDay ? "" : localDateTimeValue(event.start.dateTime).slice(11);
+      document.getElementById("calendar-event-end-time").value = allDay ? "" : localDateTimeValue(event.end.dateTime).slice(11);
+      document.getElementById("calendar-event-start-time").disabled = allDay;
+      document.getElementById("calendar-event-end-time").disabled = allDay;
+      document.getElementById("calendar-event-start-time").required = !allDay;
+      document.getElementById("calendar-event-end-time").required = !allDay;
+      form.scrollIntoView({ behavior:"smooth", block:"center" });
+    }
+    async function refreshCalendarEvents() {
+      const loadId = ++calendarLoadId;
+      if (!window.googleCalendar?.isConnected()) {
+        calendarEvents = [];
+        document.getElementById("calendar-connect").hidden = false;
+        document.getElementById("calendar-add-event").hidden = true;
+        document.getElementById("calendar-connect").disabled = !window.googleCalendar?.isConfigured();
+        document.getElementById("calendar-refresh").disabled = true;
+        document.getElementById("calendar-disconnect").hidden = true;
+        if (!window.googleCalendar?.isConfigured()) {
+          showCalendarStatus("Set a Google OAuth client ID in supabase-config.js to connect.");
+        } else {
+          showCalendarStatus("Connect your Google account to view and edit its primary calendar.");
+        }
+        renderCalendarWeek();
+        return;
+      }
+      document.getElementById("calendar-connect").hidden = true;
+      document.getElementById("calendar-add-event").hidden = false;
+      document.getElementById("calendar-refresh").disabled = false;
+      document.getElementById("calendar-disconnect").hidden = false;
+      showCalendarStatus("Loading your Google Calendar…");
+      const rangeEnd = new Date(visibleMonday);
+      rangeEnd.setDate(rangeEnd.getDate() + 7);
+      try {
+        calendarEvents = await window.googleCalendar.listEvents(
+          new Date(visibleMonday).toISOString(),
+          rangeEnd.toISOString()
+        );
+        if (loadId !== calendarLoadId) return;
+        renderCalendarWeek();
+        showCalendarStatus("Connected to your primary Google Calendar. Changes refresh while this page is open.");
+      } catch (error) {
+        if (loadId !== calendarLoadId) return;
+        calendarEvents = [];
+        renderCalendarWeek();
+        showCalendarStatus(error.message || "Could not load Google Calendar.", true);
+      }
+    }
     function renderCalendarWeek() {
       const calendar = document.getElementById("calendar-week");
       calendar.replaceChildren();
@@ -626,7 +735,7 @@
         const day = new Date(visibleMonday);
         day.setDate(day.getDate() + offset);
         const date = isoDay(day);
-        const events = calendarEvents.filter(event => event.date === date);
+        const events = calendarEvents.filter(event => window.googleCalendar.occursOnDate(event, date));
         const column = document.createElement("div");
         column.className = "min-h-[120px] rounded-xl border border-[#dbdfeb] p-3";
         const heading = document.createElement("h3");
@@ -635,20 +744,49 @@
         column.appendChild(heading);
         events.forEach(event => {
           const card = document.createElement("div");
-          card.className = `calendar-event mb-2${event.allDay ? " all-day" : ""}`;
+          card.className = `calendar-event mb-2${event.start?.dateTime ? "" : " all-day"}`;
           const time = document.createElement("div");
           time.className = "calendar-time";
-          time.textContent = event.allDay ? "ALL DAY" : `${event.start}–${event.end}`;
+          time.textContent = event.start?.dateTime
+            ? `${calendarEventTime(event.start)}–${calendarEventTime(event.end)}`
+            : "ALL DAY";
           const title = document.createElement("div");
           title.className = "text-sm font-semibold";
-          title.textContent = event.title;
+          title.textContent = event.summary || "(Untitled event)";
           card.append(time, title);
+          if (window.googleCalendar?.isConnected()) {
+            const actions = document.createElement("div");
+            actions.className = "mt-2 flex gap-2";
+            const edit = document.createElement("button");
+            edit.type = "button";
+            edit.className = "text-xs font-semibold underline";
+            edit.textContent = "Edit";
+            edit.setAttribute("aria-label", `Edit ${event.summary || "event"}`);
+            edit.addEventListener("click", () => editCalendarEvent(event));
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "text-xs font-semibold text-[#a1473f] underline";
+            remove.textContent = "Delete";
+            remove.setAttribute("aria-label", `Delete ${event.summary || "event"}`);
+            remove.addEventListener("click", async () => {
+              if (!window.confirm(`Delete "${event.summary || "this event"}" from Google Calendar?`)) return;
+              remove.disabled = true;
+              try {
+                await window.googleCalendar.deleteEvent(event.id);
+              } catch (error) {
+                remove.disabled = false;
+                showCalendarStatus(error.message || "Could not delete the event.", true);
+              }
+            });
+            actions.append(edit, remove);
+            card.appendChild(actions);
+          }
           column.appendChild(card);
         });
         if (!events.length) {
           const empty = document.createElement("p");
           empty.className = "text-sm text-[#778078]";
-          empty.textContent = "No events";
+          empty.textContent = window.googleCalendar?.isConnected() ? "No events" : "Connect Google Calendar to view events";
           column.appendChild(empty);
         }
         calendar.appendChild(column);
@@ -704,12 +842,109 @@
     document.getElementById("today-week").addEventListener("click", () => {
       visibleMonday = mondayOf(new Date());
       renderWeek();
+      refreshCalendarEvents();
     });
     function changeWeek(days) {
       visibleMonday = new Date(visibleMonday);
       visibleMonday.setDate(visibleMonday.getDate() + days);
       renderWeek();
+      refreshCalendarEvents();
     }
+    document.getElementById("calendar-connect").addEventListener("click", async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await window.googleCalendar.connect();
+      } catch (error) {
+        showCalendarStatus(error.message || "Google Calendar could not be connected.", true);
+      } finally {
+        button.disabled = !window.googleCalendar.isConfigured();
+      }
+    });
+    document.getElementById("calendar-refresh").addEventListener("click", refreshCalendarEvents);
+    document.getElementById("calendar-add-event").addEventListener("click", () => {
+      const form = calendarForm();
+      form.hidden = false;
+      document.getElementById("calendar-event-start-date").value = isoDay(new Date());
+      document.getElementById("calendar-event-end-date").value = isoDay(new Date());
+      document.getElementById("calendar-event-title").focus();
+      form.scrollIntoView({ behavior:"smooth", block:"center" });
+    });
+    document.getElementById("calendar-disconnect").addEventListener("click", () => {
+      resetCalendarForm();
+      window.googleCalendar.disconnect();
+    });
+    document.getElementById("calendar-event-all-day").addEventListener("change", event => {
+      const allDay = event.currentTarget.checked;
+      for (const id of ["calendar-event-start-time", "calendar-event-end-time"]) {
+        const input = document.getElementById(id);
+        input.disabled = allDay;
+        input.required = !allDay;
+      }
+    });
+    document.getElementById("calendar-event-cancel").addEventListener("click", resetCalendarForm);
+    document.getElementById("calendar-event-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!window.googleCalendar?.isConnected()) {
+        showCalendarStatus("Connect Google Calendar before saving events.", true);
+        return;
+      }
+      const title = document.getElementById("calendar-event-title").value.trim();
+      const startDate = document.getElementById("calendar-event-start-date").value;
+      const endDate = document.getElementById("calendar-event-end-date").value;
+      const allDay = document.getElementById("calendar-event-all-day").checked;
+      const startTime = document.getElementById("calendar-event-start-time").value;
+      const endTime = document.getElementById("calendar-event-end-time").value;
+      if (!title || !startDate || !endDate || endDate < startDate ||
+          (!allDay && (!startTime || !endTime || new Date(`${endDate}T${endTime}`) <= new Date(`${startDate}T${startTime}`)))) {
+        showCalendarStatus("Check the event title and ensure the end is after the start.", true);
+        return;
+      }
+      const allDayEnd = new Date(`${endDate}T00:00:00`);
+      allDayEnd.setDate(allDayEnd.getDate() + 1);
+      const payload = {
+        summary: title,
+        description: document.getElementById("calendar-event-description").value.trim(),
+        start: allDay ? { date:startDate } : {
+          dateTime:new Date(`${startDate}T${startTime}`).toISOString(),
+          timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone
+        },
+        end: allDay ? { date:isoDay(allDayEnd) } : {
+          dateTime:new Date(`${endDate}T${endTime}`).toISOString(),
+          timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone
+        }
+      };
+      const save = document.getElementById("calendar-event-save");
+      save.disabled = true;
+      showCalendarStatus("Saving event to Google Calendar…");
+      try {
+        if (editingCalendarEvent) await window.googleCalendar.updateEvent(editingCalendarEvent.id, payload);
+        else await window.googleCalendar.createEvent(payload);
+        resetCalendarForm();
+        await refreshCalendarEvents();
+      } catch (error) {
+        showCalendarStatus(error.message || "Could not save the Google Calendar event.", true);
+      } finally {
+        save.disabled = false;
+      }
+    });
+    window.googleCalendar.subscribe(change => {
+      if (change === "disconnected") {
+        calendarEvents = [];
+        renderCalendarWeek();
+        refreshCalendarEvents();
+        showCalendarStatus("Disconnected from Google Calendar.");
+      } else {
+        refreshCalendarEvents();
+      }
+    });
+    window.addEventListener("focus", refreshCalendarEvents);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshCalendarEvents();
+    });
+    setInterval(() => {
+      if (!document.hidden && window.googleCalendar?.isConnected()) refreshCalendarEvents();
+    }, 180000);
 
     document.querySelectorAll(".add-form").forEach(form => form.addEventListener("submit", async event => {
       event.preventDefault();
@@ -904,7 +1139,11 @@
       </div>
       <p data-template-id="scroll-hint" class="canva-text muted" style="font-size: 12px; color: rgb(113, 128, 121); font-weight: 400; font-style: normal;">Scroll sideways to see all seven days ↗</p>
      </div>
-     <p data-template-id="calendar-notice" class="canva-banner rounded-xl border px-4 py-3 mb-5 leading-relaxed" style="background: rgb(255, 249, 237); border-color: rgb(236, 220, 180); color: rgb(102, 80, 44); font-weight: 400; font-style: normal; font-size: 15px;">Calendar events are not connected on this page yet. Add the existing Google Calendar event data to display timed events and all-day holidays on their correct dates.</p>
+     <div class="mb-5 flex flex-wrap items-center gap-2">
+      <button id="detail-calendar-connect" type="button" class="rounded-lg bg-[#476950] px-4 py-2 text-sm font-semibold text-white">Connect Google Calendar</button>
+      <button id="detail-calendar-refresh" type="button" class="rounded-lg border border-[#dbdfeb] bg-white px-4 py-2 text-sm" disabled>Refresh calendar</button>
+      <p id="detail-calendar-status" class="min-h-5 text-sm" role="status" aria-live="polite"></p>
+     </div>
      <p id="detail-status" role="status" aria-live="polite" class="mb-3 text-sm muted hidden"></p>
      <div class="week-scroll" role="region" aria-label="Seven-day planner" tabindex="0">
       <div id="week-grid" class="week-grid"></div>
@@ -921,7 +1160,8 @@
     <div class="day-body">
      <section class="day-section" aria-label="Calendar events">
       <p data-template-id="events-label" class="canva-text section-label mb-3">CALENDAR EVENTS</p>
-      <p data-template-id="events-empty" class="canva-text muted leading-relaxed" style="font-size:12px">Calendar events unavailable</p>
+      <div class="calendar-event-list"></div>
+      <p data-template-id="events-empty" class="canva-text muted leading-relaxed" style="font-size:12px">Connect Google Calendar to view events.</p>
      </section>
      <section class="day-section" aria-label="Daily spending">
       <p data-template-id="spending-label" class="canva-text section-label mb-2">SPENDING</p>
@@ -953,6 +1193,8 @@
     const dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     const money = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'});
     let records = [];
+    let calendarEvents = [];
+    let calendarLoadId = 0;
     let ready = false;
     let monday = startOfWeek(new Date());
 
@@ -973,6 +1215,72 @@
       status.textContent = text;
       status.classList.toggle('hidden', !text);
     }
+    function calendarMessage(text, error = false) {
+      const el = document.getElementById('detail-calendar-status');
+      el.textContent = text;
+      el.style.color = error ? '#a1473f' : '#476950';
+    }
+    function calendarDate(event) {
+      if (event.start?.date) return event.start.date;
+      if (!event.start?.dateTime) return '';
+      const date = new Date(event.start.dateTime);
+      return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+    }
+    function renderCalendarDay(card) {
+      const list = card.querySelector('.calendar-event-list');
+      const empty = card.querySelector('[data-template-id="events-empty"]');
+      list.replaceChildren();
+      const events = calendarEvents.filter(event => window.googleCalendar.occursOnDate(event, card.dataset.date));
+      for (const event of events) {
+        const item = document.createElement('p');
+        item.className = 'canva-text muted leading-relaxed mb-2';
+        const time = event.start?.dateTime
+          ? `${new Date(event.start.dateTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})} · `
+          : 'ALL DAY · ';
+        item.textContent = `${time}${event.summary || '(Untitled event)'}`;
+        list.appendChild(item);
+      }
+      empty.classList.toggle('hidden', events.length > 0);
+      if (!events.length) {
+        empty.textContent = window.googleCalendar?.isConnected()
+          ? 'No calendar events.'
+          : 'Connect Google Calendar to view events.';
+      }
+    }
+    async function refreshDetailCalendar() {
+      const loadId = ++calendarLoadId;
+      const connect = document.getElementById('detail-calendar-connect');
+      const refresh = document.getElementById('detail-calendar-refresh');
+      if (!window.googleCalendar?.isConnected()) {
+        calendarEvents = [];
+        connect.hidden = false;
+        connect.disabled = !window.googleCalendar?.isConfigured();
+        refresh.disabled = true;
+        calendarMessage(window.googleCalendar?.isConfigured()
+          ? 'Connect your Google account to view its primary calendar.'
+          : 'Set a Google OAuth client ID in supabase-config.js to connect.');
+        for (const card of grid.children) renderCalendarDay(card);
+        return;
+      }
+      connect.hidden = true;
+      refresh.disabled = false;
+      calendarMessage('Loading your Google Calendar…');
+      const end = addDays(monday, 7);
+      try {
+        calendarEvents = await window.googleCalendar.listEvents(
+          new Date(monday).toISOString(),
+          new Date(end).toISOString()
+        );
+        if (loadId !== calendarLoadId) return;
+        for (const card of grid.children) renderCalendarDay(card);
+        calendarMessage('Showing primary Google Calendar events. Changes refresh while this page is open.');
+      } catch (error) {
+        if (loadId !== calendarLoadId) return;
+        calendarEvents = [];
+        for (const card of grid.children) renderCalendarDay(card);
+        calendarMessage(error.message || 'Could not load Google Calendar.', true);
+      }
+    }
     function updateWeek() {
       const end = addDays(monday, 6);
       document.getElementById('detail-week-range').textContent =
@@ -984,8 +1292,10 @@
         card.querySelector('.day-date').textContent = day.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
         card.querySelector('.spending-input').setAttribute('aria-label', `Amount spent on ${dayNames[i]}`);
         card.querySelector('.habit-input').setAttribute('aria-label', `Habit logged on ${dayNames[i]}`);
+        renderCalendarDay(card);
         renderDay(card);
       }
+      refreshDetailCalendar();
     }
     function addEntry(list, record, format) {
       const row = document.getElementById('detail-entry-template').content.firstElementChild.cloneNode(true);
@@ -1077,6 +1387,35 @@
     document.getElementById('detail-previous-week').addEventListener('click', () => { monday=addDays(monday,-7); updateWeek(); });
     document.getElementById('detail-next-week').addEventListener('click', () => { monday=addDays(monday,7); updateWeek(); });
     document.getElementById('current-week').addEventListener('click', () => { monday=startOfWeek(new Date()); updateWeek(); });
+    document.getElementById('detail-calendar-connect').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await window.googleCalendar.connect();
+      } catch (error) {
+        calendarMessage(error.message || 'Google Calendar could not be connected.', true);
+      } finally {
+        button.disabled = !window.googleCalendar.isConfigured();
+      }
+    });
+    document.getElementById('detail-calendar-refresh').addEventListener('click', refreshDetailCalendar);
+    window.googleCalendar.subscribe(change => {
+      if (change === 'disconnected') {
+        calendarEvents = [];
+        for (const card of grid.children) renderCalendarDay(card);
+        refreshDetailCalendar();
+        calendarMessage('Disconnected from Google Calendar.');
+      } else {
+        refreshDetailCalendar();
+      }
+    });
+    window.addEventListener('focus', refreshDetailCalendar);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshDetailCalendar();
+    });
+    setInterval(() => {
+      if (!document.hidden && window.googleCalendar?.isConnected()) refreshDetailCalendar();
+    }, 180000);
     buildDays();
     (async () => {
       try {
