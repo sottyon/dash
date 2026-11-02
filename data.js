@@ -228,8 +228,18 @@
     syncPromise = serializeWrite(async () => {
       if (!navigator.onLine) return;
       let state = await readOfflineState(userId);
+      let canceledOfflineDelete = false;
       while (state.pending.length && navigator.onLine) {
         const operation = state.pending[0];
+        if (operation.type === 'delete') {
+          state = await updateOfflineState(userId, current => ({
+            ...current,
+            pending: current.pending.slice(1)
+          }));
+          canceledOfflineDelete = true;
+          callbacks.forEach(callback => callback(applyPendingRecords(state.records, state.pending)));
+          continue;
+        }
         try {
           const remoteId = await sendOperation(userId, operation);
           recordRevision++;
@@ -263,7 +273,9 @@
       if (state.pending.length === 0) {
         try {
           await refreshRecords();
-          setSyncStatus('Live sync connected', true);
+          setSyncStatus(canceledOfflineDelete
+            ? 'An offline deletion was canceled to protect your data. Delete again while online if you still want to remove it.'
+            : 'Live sync connected', !canceledOfflineDelete);
         } catch (error) {
           setSyncStatus(`Synced, but refresh failed: ${errorMessage(error)}`);
         }
@@ -409,7 +421,7 @@
         const user = await getCurrentUser();
         const operation = { type: 'delete', id: record.__backendId };
         if (!navigator.onLine) {
-          return await serializeWrite(() => queueOfflineOperation(user.id, operation));
+          return reportWriteFailure(new Error('Connect to the internet before deleting a saved entry. Nothing was deleted.'));
         }
         let currentState;
         try {
@@ -427,7 +439,7 @@
           await sendOperation(user.id, operation);
         } catch (error) {
           if (isNetworkError(error)) {
-            return await serializeWrite(() => queueOfflineOperation(user.id, operation));
+            return reportWriteFailure(new Error('Could not confirm the deletion because the connection was interrupted. The entry was not queued for deletion; check it before trying again.'));
           }
           return reportWriteFailure(error);
         }
