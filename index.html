@@ -2576,7 +2576,7 @@
     </section>
    </main>
    <footer class="max-w-6xl mx-auto px-5 sm:px-8 py-8 border-t border-[#d9ded2]">
-    <p data-template-id="footer-copy" class="canva-text" style="color: rgb(68, 54, 47); font-weight: 400; font-style: normal; font-size: 13px;">Book information from Open Library and the Library of Congress. Made for the love of reading.</p>
+    <p data-template-id="footer-copy" class="canva-text" style="color: rgb(68, 54, 47); font-weight: 400; font-style: normal; font-size: 13px;">Book information from Open Library and Apple Books. Made for the love of reading.</p>
    </footer>
   </div>
   <script>
@@ -2597,7 +2597,7 @@
       const cover = new URL(url);
       if (cover.protocol !== 'https:') return '';
       if (cover.hostname === 'covers.openlibrary.org' && /^\/b\/id\/\d+-[SML]\.jpg$/.test(cover.pathname)) return cover.href;
-      if (cover.hostname === 'tile.loc.gov') return cover.href;
+      if (cover.hostname.endsWith('.mzstatic.com')) return cover.href;
     } catch (_) {}
     return '';
   }
@@ -2637,7 +2637,7 @@
   function sameBook(left, right) {
     if (left.book_source_id && left.book_source_id === right.book_source_id) return true;
     if (left.open_library_key && left.open_library_key === right.open_library_key) return true;
-    if (left.library_of_congress_id && left.library_of_congress_id === right.library_of_congress_id) return true;
+    if (left.apple_books_id && left.apple_books_id === right.apple_books_id) return true;
     const leftTitle = normalizedText(left.book_title);
     const rightTitle = normalizedText(right.book_title);
     const leftAuthor = normalizedText(left.book_author).split(',')[0];
@@ -2660,21 +2660,21 @@
     }));
   }
 
-  async function searchLibraryOfCongress(query) {
-    const url = new URL('https://www.loc.gov/books/');
-    url.searchParams.set('q', query);
-    url.searchParams.set('fo', 'json');
-    url.searchParams.set('c', '12');
+  async function searchAppleBooks(query) {
+    const url = new URL('https://itunes.apple.com/search');
+    url.searchParams.set('term', query);
+    url.searchParams.set('entity', 'ebook');
+    url.searchParams.set('limit', '12');
     const response = await fetch(url, { headers: { Accept: 'application/json' } });
-    if (!response.ok) throw new Error('Library of Congress search unavailable');
+    if (!response.ok) throw new Error('Apple Books search unavailable');
     const payload = await response.json();
-    return (payload.results || []).filter(item => item.id && item.title).map(item => ({
-      book_title: String(item.title).slice(0, 300),
-      book_author: Array.isArray(item.contributor) && item.contributor.length ? item.contributor.slice(0, 2).join(', ').slice(0, 200) : 'Unknown author',
-      cover_url: Array.isArray(item.image_url) && item.image_url.length ? String(item.image_url[0]).replace(/^http:/i, 'https:') : '',
-      library_of_congress_id: String(item.id),
-      book_source_id: `loc:${item.id}`,
-      book_source: 'Library of Congress'
+    return (payload.results || []).filter(item => item.trackId && item.trackName).map(item => ({
+      book_title: String(item.trackName).slice(0, 300),
+      book_author: String(item.artistName || 'Unknown author').slice(0, 200),
+      cover_url: String(item.artworkUrl100 || '').replace(/\/\d+x\d+bb\./, '/300x300bb.'),
+      apple_books_id: String(item.trackId),
+      book_source_id: `applebooks:${item.trackId}`,
+      book_source: 'Apple Books'
     }));
   }
 
@@ -2814,16 +2814,16 @@
     const query = document.getElementById('book-query').value.trim();
     if (!query) return;
     searchButton.disabled = true;
-    searchFeedback.textContent = 'Searching Open Library and the Library of Congress…';
+    searchFeedback.textContent = 'Searching Open Library and Apple Books…';
     results = [];
     resultsEl.replaceChildren();
     try {
-      const sources = await Promise.allSettled([searchOpenLibrary(query), searchLibraryOfCongress(query)]);
+      const sources = await Promise.allSettled([searchOpenLibrary(query), searchAppleBooks(query)]);
       const availableSources = [];
       const failedSources = [];
       const combined = [];
       sources.forEach((source, index) => {
-        const label = index === 0 ? 'Open Library' : 'Library of Congress';
+        const label = index === 0 ? 'Open Library' : 'Apple Books';
         if (source.status === 'fulfilled') {
           availableSources.push(label);
           combined.push(...source.value);
