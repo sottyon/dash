@@ -217,7 +217,7 @@
       { id: 2, title: 'Week At A Glance' },
       { id: 6, title: 'Week in Depth' },
       { id: 3, title: 'Habit Tracker' },
-      { id: 4, title: 'Quarterly Finance' },
+      { id: 4, title: 'Monthly Spending' },
       { id: 5, title: 'Book Tracker' }
     ];
     const sidebar = document.createElement('aside');
