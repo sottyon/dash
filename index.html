@@ -1795,6 +1795,7 @@
     let habitVisibleMonday = habitMondayOf(new Date());
     let records = [];
     let initialized = false;
+    let addingHabit = false;
     const pending = new Map();
     let writeQueue = Promise.resolve();
     let lastWrite = 0;
@@ -1957,6 +1958,7 @@
     });
     form.addEventListener('submit', async event => {
       event.preventDefault();
+      if (addingHabit) return;
       if (!initialized) { message('Connecting to your habits. Please try again shortly.'); return; }
       const name = document.getElementById('habit-name').value.trim();
       const icon = document.getElementById('habit-icon').value.trim();
@@ -1966,6 +1968,7 @@
         habit_goal:Number(document.getElementById('habit-goal').value),
         weeks:{}
       };
+      addingHabit = true;
       addButton.disabled = true;
       message('Saving habit…');
       try {
@@ -1976,7 +1979,10 @@
           message('Habit added.');
         } else message('Could not add the habit. Please try again.');
       } catch (_) { message('Could not add the habit. Please try again.'); }
-      finally { addButton.disabled = false; }
+      finally {
+        addingHabit = false;
+        addButton.disabled = false;
+      }
     });
     document.getElementById('habit-previous-week').addEventListener('click', () => shiftHabitWeek(-7));
     document.getElementById('habit-current-week').addEventListener('click', () => {
@@ -1989,7 +1995,9 @@
       try {
         const result = await window.dataSdk.init({
           onDataChanged(data) {
-            records = data;
+            records = data.filter(record =>
+              typeof record.habit_name === 'string' && record.habit_name.trim()
+            );
             initialized = true;
             render();
           }
