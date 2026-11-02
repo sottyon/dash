@@ -1342,7 +1342,8 @@
       const currentAccountValue = accountSelect.value;
       const defaultChecking = accounts.find(account => account.id && records.some(record =>
         record.__backendId === account.id && record.type === 'checking'));
-      const currentAccount = accounts.find(account => account.id === currentAccountValue || account.label === currentAccountValue);
+      const currentAccount = accounts.find(account =>
+        account.id === currentAccountValue.replace(/^account:/, '') || account.label === currentAccountValue);
       const selectedAccount = !accountSelect.dataset.userSelected && (!currentAccountValue || currentAccountValue === 'label:Cash / checking') && defaultChecking
         ? defaultChecking
         : currentAccount || accounts.find(account => account.label === currentAccountValue.replace(/^label:/, '')) || {label:currentAccountValue.replace(/^label:/, '') || 'Cash / checking'};
