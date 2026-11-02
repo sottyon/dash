@@ -42,7 +42,9 @@
     .stat-label { color:var(--muted); font-size:13px; font-weight:600; }
     .stat-number { font-family:'Fraunces',serif; font-size:43px; line-height:1; }
     .stat:nth-child(2) { background:#d0efef; border-color:#dbdfeb; }
-    .columns { display:grid; grid-template-columns:minmax(0,1.75fr) minmax(250px,1fr); gap:18px; margin-top:18px; align-items:start; }
+    .columns { display:grid; grid-template-columns:minmax(0,1fr); gap:18px; margin-top:18px; align-items:start; }
+    .task-support { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-items:start; }
+    #task-notes-panel { grid-column:1 / -1; }
     .panel { padding:25px; }
     .panel h2 { margin:0; font-size:25px; }
     .panel-caption { color:var(--muted); font-size:13px; margin:5px 0 0; }
@@ -57,6 +59,9 @@
     .task-name { font-weight:700; overflow-wrap:anywhere; }
     .task-row.done .task-name { text-decoration:line-through; color:#929b94; }
     .task-meta { font-size:12px; color:var(--muted); margin-top:3px; }
+    .task-category { flex:none; padding:5px 9px; border-radius:999px; background:#edf8f8; color:#365f63; font-size:11px; font-weight:700; }
+    .task-category.personal { background:#fff0f4; color:#9a4964; }
+    .task-notes { width:100%; min-height:130px; resize:vertical; border:1px solid #dfe5dc; background:#fff; border-radius:9px; padding:12px; color:var(--ink); line-height:1.5; }
     .priority { font-size:11px; font-weight:700; padding:5px 9px; border-radius:999px; background:#f1f2ec; color:#58675d; white-space:nowrap; }
     .priority.high { background:#fbede5; color:#a35e36; }
     .priority.low { background:#ecf1fa; color:#536f96; }
@@ -98,6 +103,7 @@
     .dashboard-sidebar-note { margin-top:auto; color:#d5c9c2; font-size:12px; line-height:1.6; }
     .dashboard-sync-status { color:#d5c9c2; font-size:11px; }
     .dashboard-sync-status[data-connected="true"]::before { content:""; display:inline-block; width:7px; height:7px; margin-right:7px; border-radius:50%; background:#9ed6a5; }
+    .dashboard-sync-status[data-error="true"] { color:#ffc1bd; }
     .iphone-install-note { margin-top:14px; padding:12px 14px; border:1px solid #dbdfeb; border-radius:12px; background:#fff; color:#44362f; font-size:13px; line-height:1.5; }
     .dashboard-page-content { min-width:0; }
     .celebration-layer { position:fixed; inset:0; z-index:10001; overflow:hidden; pointer-events:none; }
@@ -114,10 +120,12 @@
       .dashboard-sync-status { display:block; flex:none; width:9px; height:9px; padding:0; overflow:hidden; border-radius:50%; background:#e2a247; font-size:0; }
       .dashboard-sync-status[data-connected="true"] { background:#9ed6a5; }
       .dashboard-sync-status::before { display:none !important; }
+      .dashboard-sync-status[data-error="true"] { position:fixed; z-index:10000; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); left:12px; width:auto; height:auto; padding:10px 12px; border-radius:12px; background:#44362f; color:#fff; font-size:12px; line-height:1.45; overflow-wrap:anywhere; box-shadow:0 4px 18px #0003; }
       .dashboard-sidebar { padding-top:calc(10px + env(safe-area-inset-top)); }
     }
     @supports(padding:env(safe-area-inset-bottom)) { body { padding-bottom:env(safe-area-inset-bottom); } }
     @media(max-width:850px) { .app-shell{grid-template-columns:1fr} .side{padding:16px 22px; flex-direction:row; align-items:center; gap:16px} .side-foot{display:none} .main-area{padding:30px 20px 60px} }
+    @media(max-width:850px) { .task-support{grid-template-columns:minmax(0,1fr)} }
     @media(max-width:650px) { .columns{grid-template-columns:1fr} .stats{gap:8px} .stat{padding:15px;min-height:110px} .stat-number{font-size:34px} .form-grid{grid-template-columns:1fr} .topline{align-items:start} .primary{padding:11px} .priority{display:none} }
   </style>
   <script>
@@ -258,24 +266,29 @@
          <strong id="overview-books" class="mt-2 block text-lg">Loading bookshelf…</strong>
          <span id="overview-books-reading" class="mt-1 block text-sm text-[#69756d]"></span>
         </a>
-       </div>
+         <a href="#task-checklist" class="canva-card rounded-2xl border border-[#dbdfeb] bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+          <span class="text-xs font-bold uppercase tracking-wider text-[#476950]">Task checklist</span>
+          <strong id="overview-task-count" class="mt-2 block text-lg">Loading tasks…</strong>
+          <span id="overview-task-split" class="mt-1 block text-sm text-[#69756d]"></span>
+         </a>
+        </div>
       </section>
       <div class="columns">
-      <section data-template-id="tasks-panel" class="canva-panel panel" aria-labelledby="tasks-heading">
-       <div class="panel-heading">
-        <div>
-         <h2 id="tasks-heading" data-template-id="tasks-heading-text" class="canva-text">Your tasks</h2>
-         <p data-template-id="tasks-caption" class="canva-text panel-caption">The small steps add up.</p>
+      <section id="task-checklist" data-template-id="tasks-panel" class="canva-panel panel" aria-labelledby="tasks-heading">
+        <div class="panel-heading">
+         <div>
+          <h2 id="tasks-heading" data-template-id="tasks-heading-text" class="canva-text">Task checklist</h2>
+          <p data-template-id="tasks-caption" class="canva-text panel-caption">Check off work and personal tasks as you go.</p>
+         </div>
         </div>
-       </div>
-       <div class="filters" role="group" aria-label="Filter tasks">
-        <button type="button" data-filter="all" data-template-id="filter-all" class="canva-button filter active" aria-pressed="true">All</button> <button type="button" data-filter="active" data-template-id="filter-active" class="canva-button filter" aria-pressed="false">To do</button> <button type="button" data-filter="completed" data-template-id="filter-completed" class="canva-button filter" aria-pressed="false">Done</button>
-       </div>
-       <div id="task-list" class="task-list"></div>
-       <p id="empty-state" data-template-id="empty-state" class="canva-text empty">Nothing here yet. Add a task to get started.</p>
+        <div class="filters" role="group" aria-label="Filter tasks">
+         <button type="button" data-filter="all" data-template-id="filter-all" class="canva-button filter active" aria-pressed="true">All</button> <button type="button" data-filter="Work" class="canva-button filter" aria-pressed="false">Work</button> <button type="button" data-filter="Personal" class="canva-button filter" aria-pressed="false">Personal</button> <button type="button" data-filter="active" data-template-id="filter-active" class="canva-button filter" aria-pressed="false">To do</button> <button type="button" data-filter="completed" data-template-id="filter-completed" class="canva-button filter" aria-pressed="false">Done</button>
+        </div>
+        <div id="task-list" class="task-list"></div>
+        <p id="empty-state" data-template-id="empty-state" class="canva-text empty">Nothing here yet. Add a task to get started.</p>
       </section>
-      <div>
-       <section data-template-id="progress-panel" class="canva-panel panel" aria-labelledby="progress-heading">
+      <div class="task-support">
+        <section data-template-id="progress-panel" class="canva-panel panel" aria-labelledby="progress-heading">
         <h2 id="progress-heading" data-template-id="progress-heading-text" class="canva-text">Your progress</h2>
         <p data-template-id="progress-caption" class="canva-text panel-caption">A snapshot of your momentum.</p>
         <div class="chart-wrap">
@@ -289,7 +302,7 @@
          <div class="form-grid">
           <div><label for="task-title" data-template-id="title-label" class="canva-text">What needs doing?</label><input id="task-title" data-template-id="title-input" class="canva-input" type="text" maxlength="120" placeholder="e.g. Plan the week" required="">
           </div>
-          <div><label for="task-category" data-template-id="category-label" class="canva-text">Category</label><select id="task-category" class="canva-dropdown"><option value="Work">Work</option><option value="Personal">Personal</option><option value="Other">Other</option></select>
+          <div><label for="task-category" data-template-id="category-label" class="canva-text">Task type</label><select id="task-category" class="canva-dropdown"><option value="Work">Work</option><option value="Personal">Personal</option></select>
           </div>
           <div><label for="task-priority" data-template-id="priority-label" class="canva-text">Priority</label><select id="task-priority" class="canva-dropdown"><option value="Medium">Medium</option><option value="High">High</option><option value="Low">Low</option></select>
           </div>
@@ -298,6 +311,13 @@
           <button id="save-task" type="submit" data-template-id="save-button" class="canva-button primary">Save task</button> <button id="cancel-form" type="button" data-template-id="cancel-button" class="canva-button secondary">Cancel</button>
          </div>
         </form>
+       </section>
+       <section id="task-notes-panel" class="canva-panel panel" aria-labelledby="task-notes-heading">
+        <h2 id="task-notes-heading" class="canva-text">Notes</h2>
+        <p class="canva-text panel-caption">A place for reminders and details alongside your checklist.</p>
+        <label class="sr-only" for="task-notes">Task notes</label>
+        <textarea id="task-notes" class="task-notes mt-4" maxlength="5000" placeholder="Jot down a note…"></textarea>
+        <div class="form-actions"><button id="save-task-notes" type="button" class="canva-button primary">Save notes</button><span id="task-notes-status" class="text-sm" role="status" aria-live="polite"></span></div>
        </section>
       </div>
      </div>
@@ -341,7 +361,7 @@
     <div class="task-copy">
      <div data-template-id="task-title" class="canva-text task-name"></div>
      <div data-template-id="task-meta" class="canva-text task-meta"></div>
-    </div><span data-template-id="task-priority" class="canva-tag priority"></span> <button type="button" class="icon-button delete-trigger" aria-label="Delete task"><i data-lucide="trash-2" class="w-4 h-4" aria-hidden="true"></i></button>
+    </div><span data-template-id="task-category" class="task-category"></span><span data-template-id="task-priority" class="canva-tag priority"></span> <button type="button" class="icon-button delete-trigger" aria-label="Delete task"><i data-lucide="trash-2" class="w-4 h-4" aria-hidden="true"></i></button>
     <div class="delete-actions hidden"><button type="button" data-template-id="confirm-delete" class="canva-button small-button">Delete?</button><button type="button" data-template-id="cancel-delete" class="canva-button small-button cancel">Cancel</button>
     </div>
    </article>
@@ -396,12 +416,19 @@
       $('overview-books').textContent = `${books.length} ${books.length === 1 ? 'book' : 'books'} on your shelf`;
       $('overview-books-reading').textContent = `${books.filter(book => book.status === 'Reading').length} currently being read`;
     }
-    const matches = r => filter === 'all' || (filter === 'completed' ? r.completed : !r.completed);
+    const matches = r => filter === 'all' ||
+      (filter === 'completed' ? r.completed :
+        filter === 'active' ? !r.completed :
+          filter === 'Work' || filter === 'Personal' ? (r.category === 'Work' ? 'Work' : 'Personal') === filter : false);
     function refresh() {
       const list = tasks(), done = list.filter(t => t.completed).length;
       $('total-count').textContent = list.length;
       $('completed-count').textContent = done;
       $('remaining-count').textContent = list.length - done;
+      $('overview-task-count').textContent = `${list.length - done} ${list.length - done === 1 ? 'task' : 'tasks'} to do`;
+      const workCount = list.filter(task => task.category === 'Work' && !task.completed).length;
+      const personalCount = list.filter(task => task.category !== 'Work' && !task.completed).length;
+      $('overview-task-split').textContent = `${workCount} work · ${personalCount} personal`;
       renderOverview();
       if (chart) { chart.data.datasets[0].data = [done, list.length - done]; chart.update(); }
       for (const r of list) {
@@ -449,9 +476,13 @@
         }
         const name = row.querySelector('[data-template-id="task-title"]');
         const meta = row.querySelector('[data-template-id="task-meta"]');
+        const category = row.querySelector('[data-template-id="task-category"]');
         const badge = row.querySelector('[data-template-id="task-priority"]');
         if (name.textContent !== r.title) name.textContent = r.title;
-        const metaText = `${r.category} · ${new Date(r.created_at).toLocaleDateString('en-US', {month:'short',day:'numeric'})}`;
+        const categoryName = r.category === 'Work' ? 'Work' : 'Personal';
+        category.textContent = categoryName;
+        category.classList.toggle('personal', categoryName === 'Personal');
+        const metaText = new Date(r.created_at).toLocaleDateString('en-US', {month:'short',day:'numeric'});
         if (meta.textContent !== metaText) meta.textContent = metaText;
         if (badge.textContent !== r.priority) badge.textContent = r.priority;
         badge.className = 'canva-tag priority ' + (r.priority || '').toLowerCase();
@@ -477,6 +508,25 @@
       document.querySelectorAll('[data-filter]').forEach(b => { b.classList.toggle('active', b === button); b.setAttribute('aria-pressed', String(b === button)); });
       refresh();
     }));
+    $('save-task-notes').addEventListener('click', async () => {
+      if (!ready) { $('task-notes-status').textContent = 'Connect to save your notes.'; return; }
+      const button = $('save-task-notes');
+      const content = $('task-notes').value;
+      const existing = [...records.values()].find(record => record.type === 'task_notes');
+      button.disabled = true;
+      $('task-notes-status').textContent = 'Saving…';
+      try {
+        const result = existing
+          ? await window.dataSdk.update({ ...existing, content })
+          : await window.dataSdk.create({ type:'task_notes', content, created_at:new Date().toISOString() });
+        if (!result.isOk) throw result.error;
+        $('task-notes-status').textContent = result.queued ? 'Saved on this device; waiting to sync.' : 'Notes saved.';
+      } catch (error) {
+        $('task-notes-status').textContent = error.message || 'Could not save your notes.';
+      } finally {
+        button.disabled = false;
+      }
+    });
     $('task-form').addEventListener('submit', async event => {
       event.preventDefault();
       if (!ready) { message('Tasks are not connected yet. Please try again shortly.'); return; }
@@ -490,7 +540,7 @@
           type:'task', title, completed:false, priority:$('task-priority').value,
           category:$('task-category').value, created_at:new Date().toISOString()
         });
-        if (result.isOk) { $('task-form').reset(); $('form-panel').classList.add('hidden'); message('Task added.',true); }
+        if (result.isOk) { $('task-form').reset(); $('form-panel').classList.add('hidden'); message(result.queued ? 'Task saved on this device; waiting to sync.' : 'Task added.',true); }
         else message('Could not save your task. Please try again.');
       } catch (_) { message('Could not save your task. Please try again.'); }
       finally { save.disabled = false; save.removeAttribute('aria-busy'); }
@@ -501,6 +551,8 @@
           const incoming = new Set(data.map(r => r.__backendId));
           for (const id of records.keys()) if (!incoming.has(id)) records.delete(id);
           for (const r of data) records.set(r.__backendId,r);
+          const notes = data.find(record => record.type === 'task_notes');
+          if (notes && document.activeElement !== $('task-notes')) $('task-notes').value = notes.content || '';
           refresh();
         }});
         if (result.isOk) ready = true;

@@ -3,11 +3,59 @@
   let client;
   let activeUserId;
   let realtimeChannel;
+  let refreshQueue = Promise.resolve();
+  let writeQueue = Promise.resolve();
+  let syncPromise;
+  let offlineDbPromise;
+  const offlineDbName = 'daymark-dashboard-offline';
+
+  function openOfflineDb() {
+    if (!offlineDbPromise) {
+      offlineDbPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open(offlineDbName, 1);
+        request.onupgradeneeded = () => {
+          request.result.createObjectStore('users', { keyPath: 'userId' });
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+    return offlineDbPromise;
+  }
+
+  async function readOfflineState(userId) {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction('users', 'readonly').objectStore('users').get(userId);
+      request.onsuccess = () => resolve(request.result || { userId, records: [], pending: [] });
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function writeOfflineState(state) {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction('users', 'readwrite');
+      transaction.objectStore('users').put(state);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error || new Error('Could not save offline dashboard data.'));
+    });
+  }
+
+  function serializeWrite(operation) {
+    const request = writeQueue.catch(() => {}).then(operation);
+    writeQueue = request;
+    return request;
+  }
 
   function setSyncStatus(text, connected = false) {
     document.querySelectorAll('.dashboard-sync-status').forEach(status => {
       status.textContent = text;
       status.dataset.connected = String(connected);
+      status.dataset.error = String(/failed|offline|waiting|unavailable/i.test(text));
+      status.title = text;
+      status.setAttribute('aria-label', text);
     });
   }
 
@@ -35,20 +83,167 @@
     return data.session.user;
   }
 
-  async function refreshRecords() {
-    const records = [];
-    const pageSize = 1000;
-    for (let offset = 0; ; offset += pageSize) {
-      const { data, error } = await getClient()
-        .from('dashboard_records')
-        .select('id, record')
-        .order('created_at', { ascending: true })
-        .range(offset, offset + pageSize - 1);
-      if (error) throw error;
-      records.push(...data.map(toRecord));
-      if (data.length < pageSize) break;
+  function refreshRecords() {
+    const request = refreshQueue.catch(() => {}).then(async () => {
+      const records = [];
+      const pageSize = 1000;
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await getClient()
+          .from('dashboard_records')
+          .select('id, record')
+          .order('created_at', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        records.push(...data.map(toRecord));
+        if (data.length < pageSize) break;
+      }
+      if (!activeUserId) {
+        callbacks.forEach(callback => callback(records));
+        return;
+      }
+      try {
+        const state = await readOfflineState(activeUserId);
+        state.records = records;
+        await writeOfflineState(state);
+        callbacks.forEach(callback => callback(applyPendingRecords(records, state.pending)));
+      } catch (error) {
+        setSyncStatus(`Offline cache unavailable: ${errorMessage(error)}`);
+        callbacks.forEach(callback => callback(records));
+      }
+    });
+    refreshQueue = request;
+    return request;
+  }
+
+  function errorMessage(error) {
+    return error instanceof Error ? error.message : error?.message || String(error);
+  }
+
+  function reportRefreshFailure(error) {
+    setSyncStatus(`Refresh failed: ${errorMessage(error)}`);
+  }
+
+  function reportWriteFailure(error) {
+    setSyncStatus(`Save failed: ${errorMessage(error)}`);
+    return { isOk: false, error };
+  }
+
+  function isNetworkError(error) {
+    return !navigator.onLine || error instanceof TypeError ||
+      error?.name === 'AbortError' ||
+      /failed to fetch|network request failed|load failed|networkerror/i.test(errorMessage(error));
+  }
+
+  function applyPendingRecords(records, pending) {
+    const visible = new Map(records.map(record => [record.__backendId, record]));
+    for (const operation of pending) {
+      if (operation.type === 'delete') {
+        visible.delete(operation.id);
+      } else {
+        visible.set(operation.id, operation.record);
+      }
     }
-    callbacks.forEach(callback => callback(records));
+    return [...visible.values()];
+  }
+
+  async function publishOfflineState(userId) {
+    const state = await readOfflineState(userId);
+    callbacks.forEach(callback => callback(applyPendingRecords(state.records, state.pending)));
+    return state;
+  }
+
+  async function queueOfflineOperation(userId, operation) {
+    const state = await readOfflineState(userId);
+    if (operation.type === 'update') {
+      let existing = -1;
+      for (let index = state.pending.length - 1; index >= 0; index--) {
+        if (state.pending[index].type === 'update' && state.pending[index].id === operation.id) {
+          existing = index;
+          break;
+        }
+      }
+      if (existing >= 0) state.pending[existing] = operation;
+      else state.pending.push(operation);
+    } else {
+      state.pending.push(operation);
+    }
+    await writeOfflineState(state);
+    await publishOfflineState(userId);
+    setSyncStatus(`Saved on this device — ${state.pending.length} change${state.pending.length === 1 ? '' : 's'} waiting for internet`);
+    return { isOk: true, queued: true };
+  }
+
+  async function sendOperation(userId, operation) {
+    const table = getClient().from('dashboard_records');
+    if (operation.type === 'create') {
+      const { data, error } = await table.insert({ user_id: userId, record: operation.record }).select('id').single();
+      if (error) throw error;
+      return data.id;
+    }
+    if (operation.type === 'update') {
+      const { data, error } = await table.update({ record: operation.record }).eq('id', operation.id)
+        .eq('user_id', userId).select('id').maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('The saved record no longer exists.');
+      return operation.id;
+    }
+    const { data, error } = await table.delete().eq('id', operation.id)
+      .eq('user_id', userId).select('id').maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error('The saved record no longer exists.');
+    return operation.id;
+  }
+
+  function recordPayload(record) {
+    const payload = { ...record };
+    delete payload.__backendId;
+    return payload;
+  }
+
+  function flushPendingWrites(userId) {
+    if (syncPromise) return syncPromise;
+    syncPromise = serializeWrite(async () => {
+      if (!navigator.onLine) return;
+      let state = await readOfflineState(userId);
+      while (state.pending.length && navigator.onLine) {
+        const operation = state.pending[0];
+        try {
+          const remoteId = await sendOperation(userId, operation);
+          if (operation.type === 'create') {
+            const syncedRecord = { ...operation.record, __backendId: remoteId };
+            state.records.push(syncedRecord);
+            state.pending = state.pending.slice(1).map(item => item.id === operation.id
+              ? { ...item, id: remoteId, record: item.record ? { ...item.record, __backendId: remoteId } : undefined }
+              : item);
+          } else if (operation.type === 'update') {
+            state.records = state.records.map(record => record.__backendId === operation.id ? operation.record : record);
+            state.pending = state.pending.slice(1);
+          } else {
+            state.records = state.records.filter(record => record.__backendId !== operation.id);
+            state.pending = state.pending.slice(1);
+          }
+          await writeOfflineState(state);
+          callbacks.forEach(callback => callback(applyPendingRecords(state.records, state.pending)));
+        } catch (error) {
+          if (isNetworkError(error)) {
+            setSyncStatus(`Offline — ${state.pending.length} change${state.pending.length === 1 ? '' : 's'} waiting for internet`);
+          } else {
+            setSyncStatus(`Sync failed: ${errorMessage(error)}`);
+          }
+          return;
+        }
+        state = await readOfflineState(userId);
+      }
+      if (state.pending.length === 0) {
+        try {
+          await refreshRecords();
+          setSyncStatus('Live sync connected', true);
+        } catch (error) {
+          setSyncStatus(`Synced, but refresh failed: ${errorMessage(error)}`);
+        }
+      }
+    }).catch(reportRefreshFailure).finally(() => { syncPromise = null; });
+    return syncPromise;
   }
 
   function subscribeToChanges(userId) {
@@ -63,15 +258,13 @@
         table: 'dashboard_records',
         filter: `user_id=eq.${userId}`
       }, () => {
-        refreshRecords().catch(error => {
-          const status = document.getElementById('auth-status');
-          if (status) status.textContent = `Could not refresh saved data: ${error.message}`;
-        });
+        refreshRecords().catch(reportRefreshFailure);
       })
       .subscribe(status => {
         if (status === 'SUBSCRIBED') {
           setSyncStatus('Live sync connected', true);
-          refreshRecords().catch(() => setSyncStatus('Could not refresh saved data'));
+          refreshRecords().catch(reportRefreshFailure);
+          flushPendingWrites(userId);
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           setSyncStatus(navigator.onLine ? 'Reconnecting to live sync…' : 'Offline — reconnecting when online');
         }
@@ -81,29 +274,72 @@
   window.addEventListener('online', () => {
     if (!activeUserId) return;
     setSyncStatus('Reconnecting to live sync…');
-    refreshRecords().catch(() => setSyncStatus('Could not refresh saved data'));
+    flushPendingWrites(activeUserId).then(() => refreshRecords()).catch(reportRefreshFailure);
   });
   window.addEventListener('offline', () => {
-    if (activeUserId) setSyncStatus('Offline — reconnecting when online');
+    if (!activeUserId) return;
+    publishOfflineState(activeUserId).then(state => {
+      setSyncStatus(`Offline — ${state.pending.length} change${state.pending.length === 1 ? '' : 's'} waiting for internet`);
+    }).catch(reportRefreshFailure);
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !activeUserId) return;
-    refreshRecords().catch(() => setSyncStatus('Could not refresh saved data'));
+    flushPendingWrites(activeUserId).then(() => refreshRecords()).catch(reportRefreshFailure);
   });
 
   async function saveRecord(record, id) {
-    const user = await getCurrentUser();
-    const payload = { ...record };
-    delete payload.__backendId;
-    const table = getClient().from('dashboard_records');
-    const response = id
-      ? await table.update({ record: payload }).eq('id', id).eq('user_id', user.id).select('id').maybeSingle()
-      : await table.insert({ user_id: user.id, record: payload }).select('id').single();
-    const { data, error } = response;
-    if (error) return { isOk: false, error };
-    if (!data) return { isOk: false, error: new Error('The saved record no longer exists.') };
-    await refreshRecords();
-    return { isOk: true };
+    try {
+      const user = await getCurrentUser();
+      const localId = id || `offline-${crypto.randomUUID()}`;
+      const payload = recordPayload({ ...record, __backendId: localId });
+      const operation = id
+        ? { type: 'update', id, record: { ...payload, __backendId: id } }
+        : { type: 'create', id: localId, record: { ...payload, __backendId: localId } };
+      if (!navigator.onLine) {
+        return await serializeWrite(() => queueOfflineOperation(user.id, operation));
+      }
+      let currentState;
+      try {
+        currentState = await readOfflineState(user.id);
+      } catch (error) {
+        setSyncStatus(`Offline cache unavailable: ${errorMessage(error)}`);
+        currentState = { pending: [] };
+      }
+      if (currentState.pending.length) {
+        const result = await serializeWrite(() => queueOfflineOperation(user.id, operation));
+        flushPendingWrites(user.id);
+        return result;
+      }
+      let resultId;
+      try {
+        resultId = await sendOperation(user.id, operation);
+      } catch (error) {
+        if (isNetworkError(error)) {
+          return await serializeWrite(() => queueOfflineOperation(user.id, operation));
+        }
+        return reportWriteFailure(error);
+      }
+      setSyncStatus('Saved to Supabase', true);
+      try {
+        const state = await readOfflineState(user.id);
+        if (operation.type === 'create') {
+          state.records.push({ ...operation.record, __backendId: resultId });
+        } else {
+          state.records = state.records.map(saved => saved.__backendId === resultId ? operation.record : saved);
+        }
+        await writeOfflineState(state);
+      } catch (error) {
+        setSyncStatus(`Saved to Supabase, but offline cache failed: ${errorMessage(error)}`);
+      }
+      try {
+        await refreshRecords();
+      } catch (error) {
+        setSyncStatus(`Saved to Supabase, but refresh failed: ${errorMessage(error)}`);
+      }
+      return { isOk: true };
+    } catch (error) {
+      return reportWriteFailure(error);
+    }
   }
 
   window.dataSdk = {
@@ -114,49 +350,76 @@
       callbacks.add(onDataChanged);
       try {
         const user = await getCurrentUser();
-        await refreshRecords();
+        activeUserId = user.id;
         subscribeToChanges(user.id);
+        try {
+          await refreshRecords();
+        } catch (error) {
+          if (!isNetworkError(error)) throw error;
+          const state = await publishOfflineState(user.id);
+          setSyncStatus(`Offline — ${state.pending.length} change${state.pending.length === 1 ? '' : 's'} waiting for internet`);
+        }
+        flushPendingWrites(user.id);
         return { isOk: true };
       } catch (error) {
         return { isOk: false, error };
       }
     },
     async create(record) {
-      try {
-        return await saveRecord(record);
-      } catch (error) {
-        return { isOk: false, error };
-      }
+      return saveRecord(record);
     },
     async update(record) {
       if (!record.__backendId) {
-        return { isOk: false, error: new Error('The saved record ID is missing.') };
+        return reportWriteFailure(new Error('The saved record ID is missing.'));
       }
-      try {
-        return await saveRecord(record, record.__backendId);
-      } catch (error) {
-        return { isOk: false, error };
-      }
+      return saveRecord(record, record.__backendId);
     },
     async delete(record) {
       if (!record.__backendId) {
-        return { isOk: false, error: new Error('The saved record ID is missing.') };
+        return reportWriteFailure(new Error('The saved record ID is missing.'));
       }
       try {
         const user = await getCurrentUser();
-        const { data, error } = await getClient()
-          .from('dashboard_records')
-          .delete()
-          .eq('id', record.__backendId)
-          .eq('user_id', user.id)
-          .select('id')
-          .maybeSingle();
-        if (error) return { isOk: false, error };
-        if (!data) return { isOk: false, error: new Error('The saved record no longer exists.') };
-        await refreshRecords();
+        const operation = { type: 'delete', id: record.__backendId };
+        if (!navigator.onLine) {
+          return await serializeWrite(() => queueOfflineOperation(user.id, operation));
+        }
+        let currentState;
+        try {
+          currentState = await readOfflineState(user.id);
+        } catch (error) {
+          setSyncStatus(`Offline cache unavailable: ${errorMessage(error)}`);
+          currentState = { pending: [] };
+        }
+        if (currentState.pending.length) {
+          const result = await serializeWrite(() => queueOfflineOperation(user.id, operation));
+          flushPendingWrites(user.id);
+          return result;
+        }
+        try {
+          await sendOperation(user.id, operation);
+        } catch (error) {
+          if (isNetworkError(error)) {
+            return await serializeWrite(() => queueOfflineOperation(user.id, operation));
+          }
+          return reportWriteFailure(error);
+        }
+        setSyncStatus('Saved to Supabase', true);
+        try {
+          const state = await readOfflineState(user.id);
+          state.records = state.records.filter(saved => saved.__backendId !== operation.id);
+          await writeOfflineState(state);
+        } catch (error) {
+          setSyncStatus(`Saved to Supabase, but offline cache failed: ${errorMessage(error)}`);
+        }
+        try {
+          await refreshRecords();
+        } catch (error) {
+          setSyncStatus(`Saved to Supabase, but refresh failed: ${errorMessage(error)}`);
+        }
         return { isOk: true };
       } catch (error) {
-        return { isOk: false, error };
+        return reportWriteFailure(error);
       }
     },
     async signInWithPassword(email, password) {
