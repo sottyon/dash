@@ -11,10 +11,23 @@ The dashboard is a static GitHub Pages site. Supabase stores records across week
 7. Publish the files to GitHub Pages and open the site.
 8. On your iPhone, open the dashboard link in Safari, tap **Share**, then **Add to Home Screen**. Launch the new Daymark icon for an app-like full-screen view.
 
+## Google Calendar
+
+The calendar panel can read, create, update, and delete events on your Google **primary calendar**. It requests the `calendar.events` permission. Events are fetched when the dashboard opens or returns to the foreground, and refreshed about every three minutes while it is open; this static GitHub Pages site cannot receive Google's server-side push notifications while closed.
+
+To connect it:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create/select a project and enable the **Google Calendar API**.
+2. Configure the OAuth consent screen. If the app remains in testing mode, add your Google account as a test user; Google may require you to reconnect periodically while the app is unverified.
+3. Create an OAuth client ID for a **Web application**. Add `https://sottyon.github.io` as an authorized JavaScript origin (origins must not include `/dash/`).
+4. Put the client ID—not a client secret—in the `googleClientId` field in `supabase-config.js`, publish the update to GitHub Pages, then connect from either calendar view and grant access.
+
+The OAuth client ID is public browser configuration; never put the OAuth client secret in this repository. Google Calendar access tokens stay in memory and are not saved to local storage, so reconnect after reloading the site. Dashboard calendar edits apply directly to events on the primary Google Calendar; they are not duplicated into Supabase.
+
 If you cannot sign in, use **Forgot password?** on the dashboard login form. Supabase sends a recovery link to the account email; open it in the browser, choose a new password, then return to the dashboard and sign in. The redirect URL in step 5 must be allowed for the recovery link to return to the site.
 
 The installed app and website use the same Supabase account and records. Changes sync through Supabase Realtime; the app refreshes records when a connection returns or you reopen it. Database edits require an internet connection and are not queued while offline.
 
 The RLS policies in `supabase-setup.sql` require a password-authenticated session for every dashboard data operation. Supabase's email provider can still accept a direct OTP or magic-link request for an existing account; disabling public sign-ups does not turn off that endpoint. A passwordless session is denied access to dashboard records by the RLS policies. To apply this protection to an existing project, rerun the updated SQL script in the Supabase SQL Editor; it replaces the four existing record policies.
 
-Tasks, habits, spending, calendar entries, and book records created after setup are stored in the `dashboard_records` table. Records are not shared between accounts. Existing records in the Canva Sheet are not automatically imported.
+Tasks, habits, spending, and book records created after setup are stored in the `dashboard_records` table. Google Calendar events remain in Google Calendar. Supabase records are not shared between accounts, and existing records in the Canva Sheet are not automatically imported.

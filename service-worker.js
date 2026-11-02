@@ -1,4 +1,4 @@
-const CACHE_NAME = 'daymark-shell-v1';
+const CACHE_NAME = 'daymark-shell-v2';
 const APP_ROOT = new URL('./', self.registration.scope);
 
 self.addEventListener('install', event => {
