@@ -210,10 +210,9 @@
       if (!data) throw new Error('The saved record no longer exists.');
       return operation.id;
     }
-    const { data, error } = await table.delete().eq('id', operation.id)
-      .eq('user_id', userId).select('id').maybeSingle();
+    const { data, error } = await getClient().rpc('delete_dashboard_record', { record_id: operation.id });
     if (error) throw error;
-    if (!data) throw new Error('The saved record no longer exists.');
+    if (!data) throw new Error('The saved record no longer exists or could not be deleted.');
     return operation.id;
   }
 
@@ -428,12 +427,14 @@
           currentState = await readOfflineState(user.id);
         } catch (error) {
           setSyncStatus(`Offline cache unavailable: ${errorMessage(error)}`);
-          currentState = { pending: [] };
+          return reportWriteFailure(new Error('Could not verify pending changes. Nothing was deleted.'));
         }
         if (currentState.pending.length) {
-          const result = await serializeWrite(() => queueOfflineOperation(user.id, operation));
-          flushPendingWrites(user.id);
-          return result;
+          await flushPendingWrites(user.id);
+          currentState = await readOfflineState(user.id);
+          if (currentState.pending.length) {
+            return reportWriteFailure(new Error('Wait for your saved changes to sync before deleting this entry.'));
+          }
         }
         try {
           await sendOperation(user.id, operation);
