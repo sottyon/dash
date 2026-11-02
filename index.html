@@ -201,7 +201,7 @@
     <nav aria-label="Dashboard navigation">
      <div class="side-link"><i data-lucide="layout-dashboard" aria-hidden="true" class="w-4 h-4"></i><span data-template-id="nav-dashboard" class="canva-text">Dashboard</span>
      </div>
-     <div class="flex flex-col gap-2 mt-3"><a href="#page-2" data-template-id="nav-page-2" class="canva-button side-link">Week At A Glance</a> <a href="#page-6" data-template-id="nav-page-6" class="canva-button side-link">Week in Depth</a> <a href="#page-3" data-template-id="nav-page-3" class="canva-button side-link">Habit Tracker</a> <a href="#page-4" data-template-id="nav-page-4" class="canva-button side-link">Quarterly Finance</a> <a href="#page-5" data-template-id="nav-page-5" class="canva-button side-link">Book Tracker</a>
+     <div class="flex flex-col gap-2 mt-3"><a href="#page-2" data-template-id="nav-page-2" class="canva-button side-link">Week At A Glance</a> <a href="#page-6" data-template-id="nav-page-6" class="canva-button side-link">Week in Depth</a> <a href="#page-3" data-template-id="nav-page-3" class="canva-button side-link">Habit Tracker</a> <a href="#page-4" data-template-id="nav-page-4" class="canva-button side-link">Monthly Spending</a> <a href="#page-5" data-template-id="nav-page-5" class="canva-button side-link">Book Tracker</a>
      </div>
      <button type="button" class="side-link secondary sign-out" hidden>Sign out</button>
     </nav>
@@ -225,7 +225,40 @@
       <article data-template-id="remaining-card" class="canva-card stat"><span data-template-id="remaining-label" class="canva-text stat-label">Still to do</span><strong id="remaining-count" class="stat-number">0</strong>
       </article>
      </section>
-     <div class="columns">
+      <section class="mt-7" aria-labelledby="pages-overview-heading">
+       <div class="mb-4">
+        <h2 id="pages-overview-heading" class="canva-text text-xl font-semibold">Your dashboard at a glance</h2>
+        <p class="canva-text panel-caption">A quick look across all your pages.</p>
+       </div>
+       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <a href="#page-2" class="canva-card rounded-2xl border border-[#dbdfeb] bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+         <span class="text-xs font-bold uppercase tracking-wider text-[#476950]">Week At A Glance</span>
+         <strong id="overview-week-plan" class="mt-2 block text-lg">Loading weekly plan…</strong>
+         <span id="overview-week-focus" class="mt-1 block text-sm text-[#69756d]"></span>
+        </a>
+        <a href="#page-6" class="canva-card rounded-2xl border border-[#dbdfeb] bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+         <span class="text-xs font-bold uppercase tracking-wider text-[#476950]">Week in Depth</span>
+         <strong id="overview-week-spending" class="mt-2 block text-lg">Loading weekly spending…</strong>
+         <span id="overview-week-habits" class="mt-1 block text-sm text-[#69756d]"></span>
+        </a>
+        <a href="#page-3" class="canva-card rounded-2xl border border-[#dbdfeb] bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+         <span class="text-xs font-bold uppercase tracking-wider text-[#476950]">Habit Tracker</span>
+         <strong id="overview-habits" class="mt-2 block text-lg">Loading habits…</strong>
+         <span id="overview-habit-checkins" class="mt-1 block text-sm text-[#69756d]"></span>
+        </a>
+        <a href="#page-4" class="canva-card rounded-2xl border border-[#dbdfeb] bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+         <span class="text-xs font-bold uppercase tracking-wider text-[#476950]">Monthly Spending</span>
+         <strong id="overview-month-spending" class="mt-2 block text-lg">Loading monthly spending…</strong>
+         <span id="overview-month-budget" class="mt-1 block text-sm text-[#69756d]"></span>
+        </a>
+        <a href="#page-5" class="canva-card rounded-2xl border border-[#dbdfeb] bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+         <span class="text-xs font-bold uppercase tracking-wider text-[#476950]">Book Tracker</span>
+         <strong id="overview-books" class="mt-2 block text-lg">Loading bookshelf…</strong>
+         <span id="overview-books-reading" class="mt-1 block text-sm text-[#69756d]"></span>
+        </a>
+       </div>
+      </section>
+      <div class="columns">
       <section data-template-id="tasks-panel" class="canva-panel panel" aria-labelledby="tasks-heading">
        <div class="panel-heading">
         <div>
@@ -319,14 +352,55 @@
     let ready = false;
     let chart;
     const $ = id => document.getElementById(id);
+    const money = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'});
     const message = (text, success = false) => { $('status-message').textContent = text; $('status-message').classList.toggle('success', success); };
     const tasks = () => [...records.values()].filter(r => r.type === 'task').sort((a,b) => b.created_at.localeCompare(a.created_at));
+    function renderOverview() {
+      const all = [...records.values()];
+      const today = new Date();
+      const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7);
+      const dateKey = date => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+      const mondayKey = dateKey(monday);
+      const sunday = new Date(monday);
+      sunday.setDate(sunday.getDate() + 6);
+      const sundayKey = dateKey(sunday);
+      const monthKey = mondayKey.slice(0, 7);
+      const weeklyPlan = all.filter(record => record.week_start === mondayKey);
+      const goals = weeklyPlan.filter(record => record.section === 'goal');
+      const focus = weeklyPlan.find(record => record.section === 'focus')?.content;
+      const spending = all.filter(record => record.category === 'spending' && /^\d{4}-\d{2}-\d{2}$/.test(record.priority || ''));
+      const totalForRange = records => records.filter(record => record.priority >= mondayKey && record.priority <= sundayKey)
+        .reduce((sum, record) => sum + (Number(record.title) || 0), 0);
+      const monthSpending = spending.filter(record => record.priority.startsWith(monthKey))
+        .reduce((sum, record) => sum + (Number(record.title) || 0), 0);
+      const monthBudgets = all.filter(record => record.type === 'spending_budget' && record.month === monthKey);
+      const habits = all.filter(record => record.habit_name);
+      const checkins = habits.reduce((sum, habit) => {
+        const state = habit.weeks?.[mondayKey] || {};
+        return sum + Object.values(state).filter(Boolean).length;
+      }, 0);
+      const books = all.filter(record => record.book_title);
+      $('overview-week-plan').textContent = `${goals.length} weekly ${goals.length === 1 ? 'goal' : 'goals'}`;
+      $('overview-week-focus').textContent = focus ? `Focus: ${focus}` : 'Set a focus and goals for this week.';
+      $('overview-week-spending').textContent = `${money.format(totalForRange(spending))} spent this week`;
+      $('overview-week-habits').textContent = `${checkins} habit ${checkins === 1 ? 'check-in' : 'check-ins'} this week`;
+      $('overview-habits').textContent = `${habits.length} ${habits.length === 1 ? 'habit' : 'habits'} tracked`;
+      $('overview-habit-checkins').textContent = `${checkins} check-ins completed this week`;
+      $('overview-month-spending').textContent = `${money.format(monthSpending)} spent this month`;
+      $('overview-month-budget').textContent = monthBudgets.length
+        ? `${money.format(monthBudgets.reduce((sum, record) => sum + (Number(record.value) || 0), 0))} budgeted across ${monthBudgets.length} categories`
+        : 'Set category budgets on the monthly spending page.';
+      $('overview-books').textContent = `${books.length} ${books.length === 1 ? 'book' : 'books'} on your shelf`;
+      $('overview-books-reading').textContent = `${books.filter(book => book.status === 'Reading').length} currently being read`;
+    }
     const matches = r => filter === 'all' || (filter === 'completed' ? r.completed : !r.completed);
     function refresh() {
       const list = tasks(), done = list.filter(t => t.completed).length;
       $('total-count').textContent = list.length;
       $('completed-count').textContent = done;
       $('remaining-count').textContent = list.length - done;
+      renderOverview();
       if (chart) { chart.data.datasets[0].data = [done, list.length - done]; chart.update(); }
       for (const r of list) {
         let row = rows.get(r.__backendId);
@@ -1117,7 +1191,7 @@
      <p data-template-id="brand-kicker" class="canva-text section-label mb-2" style="color: rgb(35, 93, 72); font-weight: 700; font-style: normal; font-size: 11px;">THE WEEKLY EDIT</p>
      <p data-template-id="brand-name" class="canva-text display leading-tight" style="font-size: 23px; color: rgb(36, 51, 46); font-weight: 600; font-style: normal;">Weekly Planner Dashboard</p>
     </div>
-    <nav aria-label="Dashboard pages" class="nav-list flex flex-col"><a href="#page-1" data-template-id="nav-dashboard" class="canva-text nav-item px-3 py-2 muted">Dashboard</a> <a href="#page-2" data-template-id="nav-glance" class="canva-text nav-item px-3 py-2 muted">Week At A Glance</a> <a href="#page-3" data-template-id="nav-habits" class="canva-text nav-item px-3 py-2 muted">Habit Tracker</a> <a href="#page-4" data-template-id="nav-finance" class="canva-text nav-item px-3 py-2 muted">Quarterly Finance</a> <a href="#page-5" data-template-id="nav-books" class="canva-text nav-item px-3 py-2 muted">Book Tracker</a> <a href="#page-6" data-template-id="nav-detail" aria-current="page" class="canva-text nav-item px-3 py-2 rounded-lg font-bold" style="background: rgb(231, 238, 230); color: rgb(35, 93, 72); font-weight: 700; font-style: normal; font-size: 15px;">Detailed Week</a>
+    <nav aria-label="Dashboard pages" class="nav-list flex flex-col"><a href="#page-1" data-template-id="nav-dashboard" class="canva-text nav-item px-3 py-2 muted">Dashboard</a> <a href="#page-2" data-template-id="nav-glance" class="canva-text nav-item px-3 py-2 muted">Week At A Glance</a> <a href="#page-3" data-template-id="nav-habits" class="canva-text nav-item px-3 py-2 muted">Habit Tracker</a> <a href="#page-4" data-template-id="nav-finance" class="canva-text nav-item px-3 py-2 muted">Monthly Spending</a> <a href="#page-5" data-template-id="nav-books" class="canva-text nav-item px-3 py-2 muted">Book Tracker</a> <a href="#page-6" data-template-id="nav-detail" aria-current="page" class="canva-text nav-item px-3 py-2 rounded-lg font-bold" style="background: rgb(231, 238, 230); color: rgb(35, 93, 72); font-weight: 700; font-style: normal; font-size: 15px;">Detailed Week</a>
     </nav>
     <p data-template-id="nav-note" class="canva-text muted mt-8 px-3 leading-relaxed" style="font-size: 12px; color: rgb(113, 128, 121); font-weight: 400; font-style: normal;">Jump between your dashboard pages.</p>
    </aside>
@@ -1167,7 +1241,14 @@
       <p data-template-id="spending-label" class="canva-text section-label mb-2">SPENDING</p>
       <p class="spending-total display mb-3" style="font-size:23px">$0.00</p>
       <div class="spending-list mb-3"></div>
-      <form class="spending-form flex gap-1.5"><label class="sr-only spending-input-label" for="unused-spending">Amount spent</label> <input class="spending-input small-control" type="number" min="0.01" max="999999" step="0.01" required="" inputmode="decimal" placeholder="Amount" aria-label="Amount spent"> <button data-template-id="spending-add" type="submit" class="canva-button action">Add</button>
+      <form class="spending-form grid gap-2">
+       <label class="sr-only spending-input-label" for="unused-spending">Amount spent</label>
+       <input class="spending-input small-control" type="number" min="0.01" max="999999" step="0.01" required="" inputmode="decimal" placeholder="Amount" aria-label="Amount spent">
+       <label class="sr-only" for="unused-expense-category">Expense category</label>
+       <select class="spending-category small-control" id="unused-expense-category" required aria-label="Expense category"></select>
+       <label class="sr-only" for="unused-expense-account">Account used</label>
+       <select class="spending-account small-control" id="unused-expense-account" required aria-label="Account used"></select>
+       <button data-template-id="spending-add" type="submit" class="canva-button action">Add expense</button>
       </form>
      </section>
      <section class="day-section" aria-label="Logged habits">
@@ -1192,6 +1273,7 @@
     const status = document.getElementById('detail-status');
     const dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     const money = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'});
+    const defaultExpenseCategories = ['Dining','Entertainment','Groceries','Health','Housing','Other','Shopping','Transportation','Utilities'];
     let records = [];
     let calendarEvents = [];
     let calendarLoadId = 0;
@@ -1225,6 +1307,44 @@
       if (!event.start?.dateTime) return '';
       const date = new Date(event.start.dateTime);
       return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+    }
+    function expenseCategories() {
+      return [...new Set([
+        ...defaultExpenseCategories,
+        ...records.filter(record => record.type === 'spending_budget').map(record => record.category),
+        ...records.filter(record => record.category === 'spending').map(record => record.expense_category)
+      ].map(value => String(value || '').trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+    }
+    function spendingAccounts() {
+      return [
+        'Cash / checking',
+        ...records.filter(record => ['credit','savings'].includes(record.type) && record.label)
+          .map(record => `${record.type === 'credit' ? 'Credit card' : 'Savings'} · ${record.label}`)
+      ];
+    }
+    function updateExpenseSelectors(card) {
+      const categorySelect = card.querySelector('.spending-category');
+      const accountSelect = card.querySelector('.spending-account');
+      const selectedCategory = categorySelect.value || 'Other';
+      const selectedAccount = accountSelect.value || 'Cash / checking';
+      const categories = expenseCategories();
+      if (!categories.includes(selectedCategory)) categories.push(selectedCategory);
+      categorySelect.replaceChildren(...categories.map(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        return option;
+      }));
+      categorySelect.value = selectedCategory;
+      const accounts = spendingAccounts();
+      if (!accounts.includes(selectedAccount)) accounts.push(selectedAccount);
+      accountSelect.replaceChildren(...accounts.map(account => {
+        const option = document.createElement('option');
+        option.value = account;
+        option.textContent = account;
+        return option;
+      }));
+      accountSelect.value = selectedAccount;
     }
     function renderCalendarDay(card) {
       const list = card.querySelector('.calendar-event-list');
@@ -1344,7 +1464,9 @@
       const habits = records.filter(r => r.category === 'habit' && r.priority === date);
       card.querySelector('.spending-total').textContent =
         money.format(spending.reduce((sum,r) => sum + (Number(r.title) || 0), 0));
-      syncList(card.querySelector('.spending-list'), spending, r => money.format(Number(r.title) || 0));
+      syncList(card.querySelector('.spending-list'), spending, r =>
+        `${money.format(Number(r.title) || 0)} · ${r.expense_category || 'Uncategorized'} · ${r.account || 'Account not recorded'}`);
+      updateExpenseSelectors(card);
       syncList(card.querySelector('.habits-list'), habits, r => r.title);
       card.querySelector('[data-template-id="habits-empty"]').classList.toggle('hidden', habits.length > 0);
     }
@@ -1353,6 +1475,8 @@
         const card = document.getElementById('day-template').content.firstElementChild.cloneNode(true);
         card.querySelector('.spending-input-label').htmlFor = `spending-${i}`;
         card.querySelector('.spending-input').id = `spending-${i}`;
+        card.querySelector('.spending-category').id = `expense-category-${i}`;
+        card.querySelector('.spending-account').id = `expense-account-${i}`;
         card.querySelector('.habit-input-label').htmlFor = `habit-${i}`;
         card.querySelector('.habit-input').id = `habit-${i}`;
         for (const [selector,category] of [['.spending-form','spending'],['.habit-form','habit']]) {
@@ -1372,6 +1496,10 @@
                 completed: true,
                 priority: card.dataset.date,
                 category,
+                ...(category === 'spending' ? {
+                  expense_category: form.querySelector('.spending-category').value,
+                  account: form.querySelector('.spending-account').value
+                } : {}),
                 created_at: new Date().toISOString()
               });
               if (result.isOk) { input.value = ''; }
@@ -1824,21 +1952,42 @@
    <main class="max-w-7xl mx-auto px-5 sm:px-8 py-9 sm:py-12">
     <section class="rise flex flex-wrap items-end justify-between gap-6 mb-9" aria-labelledby="page-title">
      <div>
-      <p data-template-id="eyebrow" class="canva-text eyebrow text-xs font-bold text-[#da7b87] mb-3" style="color: rgb(218, 123, 135); font-weight: 700; font-style: normal; font-size: 12px;">YOUR LIFE, IN SEASON</p>
-      <h1 id="page-title" data-template-id="page-title" class="canva-text leading-tight tracking-tight" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 32px;">Make room for what matters.</h1>
-      <p data-template-id="intro" class="canva-text mt-3 text-[#69756d] max-w-xl" style="color: rgb(105, 117, 109); font-weight: 400; font-style: normal; font-size: 16px;">Track your money, make thoughtful plans, and celebrate your progress.</p>
+      <p data-template-id="eyebrow" class="canva-text eyebrow text-xs font-bold text-[#da7b87] mb-3" style="color: rgb(218, 123, 135); font-weight: 700; font-style: normal; font-size: 12px;">YOUR MONEY, MONTH BY MONTH</p>
+      <h1 id="page-title" data-template-id="page-title" class="canva-text leading-tight tracking-tight" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 32px;">Monthly spending &amp; budget</h1>
+      <p data-template-id="intro" class="canva-text mt-3 text-[#69756d] max-w-xl" style="color: rgb(105, 117, 109); font-weight: 400; font-style: normal; font-size: 16px;">Set category budgets and see how your spending compares throughout the month.</p>
      </div><button id="quarter-open-form" data-template-id="add-button" type="button" class="canva-button bg-[#44362f] text-white rounded-xl px-5 py-3 font-semibold hover:bg-[#44362f] transition flex items-center gap-2" style="background: rgb(68, 54, 47); color: rgb(255, 255, 255);"><i data-lucide="plus" class="w-4 h-4" aria-hidden="true"></i><span data-template-id="add-button-text" class="canva-text" style="color: rgb(255, 255, 255); font-weight: 600; font-style: normal; font-size: 16px;">Add an entry</span></button>
     </section>
     <div class="rise flex flex-wrap items-center justify-between gap-4 mb-6" style="animation-delay:.08s">
      <div class="flex items-center gap-3">
-      <button id="prev-quarter" type="button" aria-label="Previous quarter" class="w-10 h-10 grid place-items-center rounded-xl border border-[#d7dfd3] bg-white hover:bg-[#edf2e9]"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+      <button id="prev-month" type="button" aria-label="Previous month" class="w-10 h-10 grid place-items-center rounded-xl border border-[#d7dfd3] bg-white hover:bg-[#edf2e9]"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
       <div class="min-w-[155px] text-center">
-       <div id="quarter-title" class="font-bold text-lg" aria-live="polite"></div>
-       <div data-template-id="quarter-caption" class="canva-text text-xs text-[#78856e]" style="color: rgb(120, 133, 110); font-weight: 400; font-style: normal; font-size: 12px;">Quarterly focus</div>
-      </div><button id="next-quarter" type="button" aria-label="Next quarter" class="w-10 h-10 grid place-items-center rounded-xl border border-[#d7dfd3] bg-white hover:bg-[#edf2e9]"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+       <div id="month-title" class="font-bold text-lg" aria-live="polite"></div>
+       <div data-template-id="month-caption" class="canva-text text-xs text-[#78856e]">Monthly overview</div>
+      </div><button id="next-month" type="button" aria-label="Next month" class="w-10 h-10 grid place-items-center rounded-xl border border-[#d7dfd3] bg-white hover:bg-[#edf2e9]"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
      </div>
      <div id="message" role="status" aria-live="polite" class="text-sm font-medium text-[#395648]"></div>
     </div>
+    <section aria-labelledby="monthly-budget-heading" class="surface mb-9 rounded-2xl bg-white p-5 sm:p-7 rise" style="animation-delay:.11s">
+     <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
+      <div>
+       <h2 id="monthly-budget-heading" class="text-2xl font-semibold">Spending vs. budget</h2>
+       <p id="monthly-budget-summary" class="mt-1 text-sm text-[#69756d]" aria-live="polite"></p>
+      </div>
+     </div>
+     <div id="budget-chart" class="space-y-4" role="list" aria-label="Monthly spending compared with budget by category"></div>
+     <p id="budget-empty" class="py-5 text-sm text-[#89938a]">No spending or budgets for this month yet.</p>
+     <form id="budget-form" class="mt-5 grid gap-3 border-t border-[#dbdfeb] pt-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+      <label class="grid gap-1 text-sm font-semibold" for="budget-category">Budget category
+       <input id="budget-category" class="field" maxlength="60" list="budget-category-suggestions" placeholder="e.g. Groceries" required>
+       <datalist id="budget-category-suggestions"></datalist>
+      </label>
+      <label class="grid gap-1 text-sm font-semibold" for="budget-amount">Monthly budget
+       <input id="budget-amount" class="field" type="number" min="0.01" max="9999999" step="0.01" inputmode="decimal" placeholder="0.00" required>
+      </label>
+      <button id="budget-save" type="submit" class="rounded-xl bg-[#44362f] px-5 py-3 font-semibold text-white">Save category budget</button>
+     </form>
+     <p id="budget-status" class="mt-3 min-h-5 text-sm" role="status" aria-live="polite"></p>
+    </section>
     <section aria-labelledby="money-heading" class="rise mb-9" style="animation-delay:.14s">
      <div class="flex items-baseline justify-between mb-4">
       <h2 id="money-heading" data-template-id="money-heading" class="canva-text" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 24px;">Money at a glance</h2><span data-template-id="money-caption" class="canva-text text-xs text-[#78856e]" style="color: rgb(120, 133, 110); font-weight: 400; font-style: normal; font-size: 12px;">Latest balances · all quarters</span>
@@ -1948,11 +2097,79 @@
   const money = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
   let records = [], ready = false, editing = null, busy = false;
   const now = new Date();
-  let quarterIndex = now.getFullYear()*4 + Math.floor(now.getMonth()/3);
-  const quarter = () => `${Math.floor(quarterIndex/4)}-Q${quarterIndex%4+1}`;
+  let monthIndex = now.getFullYear()*12 + now.getMonth();
+  const monthDate = () => new Date(Math.floor(monthIndex/12), monthIndex%12, 1);
+  const monthKey = () => `${monthDate().getFullYear()}-${String(monthDate().getMonth()+1).padStart(2,'0')}`;
+  const quarter = () => `${monthDate().getFullYear()}-Q${Math.floor(monthDate().getMonth()/3)+1}`;
   const safe = value => String(value ?? '');
   const say = text => { $('message').textContent = text; };
   const formatAmount = value => money.format(Number(value)||0);
+  const spendingRecords = () => records.filter(record =>
+    record.category === 'spending' && /^\d{4}-\d{2}-\d{2}$/.test(record.priority || '') && record.priority.startsWith(monthKey()));
+  const monthBudgets = () => records.filter(record => record.type === 'spending_budget' && record.month === monthKey());
+
+  function renderBudget() {
+    const expenses = spendingRecords();
+    const budgets = monthBudgets();
+    const spentByCategory = new Map();
+    const budgetByCategory = new Map();
+    expenses.forEach(record => {
+      const category = String(record.expense_category || 'Uncategorized').trim() || 'Uncategorized';
+      spentByCategory.set(category, (spentByCategory.get(category) || 0) + (Number(record.title) || 0));
+    });
+    budgets.forEach(record => {
+      const category = String(record.category || '').trim();
+      if (category) budgetByCategory.set(category, { ...record, value:Number(record.value) || 0 });
+    });
+    const categoriesInMonth = [...new Set([...spentByCategory.keys(), ...budgetByCategory.keys()])]
+      .sort((a,b) => a.localeCompare(b));
+    const chart = $('budget-chart');
+    chart.replaceChildren();
+    $('budget-empty').hidden = categoriesInMonth.length > 0;
+    const totalSpent = [...spentByCategory.values()].reduce((sum,value) => sum + value, 0);
+    const totalBudget = [...budgetByCategory.values()].reduce((sum,record) => sum + record.value, 0);
+    $('monthly-budget-summary').textContent = `${formatAmount(totalSpent)} spent${totalBudget
+      ? ` · ${formatAmount(totalBudget)} budgeted · ${formatAmount(totalBudget-totalSpent)} ${totalBudget >= totalSpent ? 'remaining' : 'over budget'}`
+      : ' · Set category budgets below to track your targets.'}`;
+
+    categoriesInMonth.forEach(category => {
+      const spent = spentByCategory.get(category) || 0;
+      const budget = budgetByCategory.get(category)?.value || 0;
+      const row = document.createElement('div');
+      row.className = 'space-y-1';
+      row.setAttribute('role','listitem');
+      const heading = document.createElement('div');
+      heading.className = 'flex flex-wrap items-baseline justify-between gap-2 text-sm';
+      const name = document.createElement('span');
+      name.className = 'font-semibold';
+      name.textContent = category;
+      const values = document.createElement('span');
+      values.className = spent > budget && budget > 0 ? 'font-semibold text-[#a44939]' : 'text-[#69756d]';
+      values.textContent = `${formatAmount(spent)} spent · ${budget ? `${formatAmount(budget)} budget` : 'No budget set'}`;
+      heading.append(name,values);
+      const track = document.createElement('div');
+      track.className = 'h-3 overflow-hidden rounded-full bg-[#edf0e9]';
+      track.setAttribute('aria-hidden','true');
+      const fill = document.createElement('div');
+      fill.className = `h-full rounded-full ${budget && spent > budget ? 'bg-[#d46f5d]' : 'bg-[#476950]'}`;
+      fill.style.width = `${budget ? Math.min(100,spent/budget*100) : (spent ? 100 : 0)}%`;
+      track.appendChild(fill);
+      row.setAttribute('aria-label',`${category}: ${formatAmount(spent)} spent${budget ? ` of ${formatAmount(budget)} budget` : ', no budget set'}`);
+      row.append(heading,track);
+      chart.appendChild(row);
+    });
+
+    const suggestions = new Set([
+      'Housing','Utilities','Groceries','Dining','Transportation','Health','Shopping','Entertainment','Other',
+      ...records.filter(record => record.type === 'spending_budget').map(record => record.category),
+      ...records.filter(record => record.category === 'spending').map(record => record.expense_category)
+    ]);
+    $('budget-category-suggestions').replaceChildren(...[...suggestions].filter(Boolean).sort().map(category => {
+      const option = document.createElement('option');
+      option.value = category;
+      return option;
+    }));
+  }
 
   function syncFormType() {
     const type = $('entry-type').value;
@@ -2046,7 +2263,7 @@
     } else empty?.remove();
   }
   function render() {
-    $('quarter-title').textContent=`Q${quarterIndex%4+1} · ${Math.floor(quarterIndex/4)}`;
+    $('month-title').textContent=monthDate().toLocaleDateString('en-US',{month:'long',year:'numeric'});
     const current=quarter();
     const inQuarter=records.filter(r=>r.status===current);
     for(const category of categories) reconcile(category.toLowerCase()+'-list',inQuarter.filter(r=>r.type==='goal'&&r.category===category));
@@ -2058,9 +2275,32 @@
       $(type+'-total').textContent=formatAmount(entries.reduce((sum,r)=>sum+(Number(r.value)||0),0));
       $(type+'-count').textContent=`${entries.length} ${entries.length===1?'account':'accounts'} tracked`;
     }
+    renderBudget();
   }
-  $('prev-quarter').addEventListener('click',()=>{quarterIndex--;render();});
-  $('next-quarter').addEventListener('click',()=>{quarterIndex++;render();});
+  $('prev-month').addEventListener('click',()=>{monthIndex--;render();});
+  $('next-month').addEventListener('click',()=>{monthIndex++;render();});
+  $('budget-form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    if(busy||!ready){$('budget-status').textContent='Your database is unavailable. Sign in and try again.';return;}
+    const category=$('budget-category').value.trim();
+    const amount=Number($('budget-amount').value);
+    if(!category||!Number.isFinite(amount)||amount<=0){$('budget-status').textContent='Enter a category and a valid monthly budget.';return;}
+    const existing=monthBudgets().find(record=>String(record.category||'').toLocaleLowerCase()===category.toLocaleLowerCase());
+    const budget={type:'spending_budget',category,month:monthKey(),value:amount,created_at:existing?.created_at||new Date().toISOString()};
+    const button=$('budget-save');
+    button.disabled=true;
+    $('budget-status').textContent='Saving category budget…';
+    try {
+      const result=existing
+        ? await window.dataSdk.update({...existing,...budget})
+        : await window.dataSdk.create(budget);
+      if(!result.isOk) throw result.error;
+      $('budget-form').reset();
+      $('budget-status').textContent=`${category} budget saved for ${monthDate().toLocaleDateString('en-US',{month:'long',year:'numeric'})}.`;
+    } catch(error) {
+      $('budget-status').textContent=error.message||'Could not save this budget. Please try again.';
+    } finally {button.disabled=false;}
+  });
   $('quarter-open-form').addEventListener('click',()=>openForm());
   $('close-form').addEventListener('click',closeForm);
   $('quarter-cancel-form').addEventListener('click',closeForm);
