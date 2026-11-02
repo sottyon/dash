@@ -1248,6 +1248,7 @@
        <select class="spending-category small-control" id="unused-expense-category" required aria-label="Expense category"></select>
        <label class="sr-only" for="unused-expense-account">Account used</label>
        <select class="spending-account small-control" id="unused-expense-account" required aria-label="Account used"></select>
+       <p class="spending-account-help muted hidden" style="font-size:11px">No credit cards are available. <a class="font-semibold underline" href="#page-4">Add a card in Monthly Spending</a>.</p>
        <button data-template-id="spending-add" type="submit" class="canva-button action">Add expense</button>
       </form>
      </section>
@@ -1317,11 +1318,12 @@
     }
     function spendingAccounts() {
       return [
-        {label:'Cash / checking'},
+        {label:'Cash / checking',type:'cash'},
         ...records.filter(record => ['credit','savings','checking'].includes(record.type) && record.label)
           .map(record => ({
             label:`${record.type === 'credit' ? 'Credit card' : record.type === 'savings' ? 'Savings' : 'Checking'} · ${record.label}`,
-            id:record.__backendId
+            id:record.__backendId,
+            type:record.type
           }))
       ];
     }
@@ -1346,17 +1348,43 @@
         account.id === currentAccountValue.replace(/^account:/, '') || account.label === currentAccountValue);
       const selectedAccount = !accountSelect.dataset.userSelected && (!currentAccountValue || currentAccountValue === 'label:Cash / checking') && defaultChecking
         ? defaultChecking
-        : currentAccount || accounts.find(account => account.label === currentAccountValue.replace(/^label:/, '')) || {label:currentAccountValue.replace(/^label:/, '') || 'Cash / checking'};
+        : currentAccount || accounts.find(account => account.label === currentAccountValue.replace(/^label:/, '')) || {label:currentAccountValue.replace(/^label:/, '') || 'Cash / checking',type:'cash'};
       if (!accounts.some(account => account.label === selectedAccount.label && account.id === selectedAccount.id)) accounts.push(selectedAccount);
-      accountSelect.replaceChildren(...accounts.map(account => {
-        const option = document.createElement('option');
-        option.value = account.id ? `account:${account.id}` : `label:${account.label}`;
-        option.textContent = account.label;
-        option.dataset.accountLabel = account.label;
-        if (account.id) option.dataset.accountId = account.id;
-        return option;
-      }));
+      const groups = [
+        {type:'credit',label:'Credit cards'},
+        {type:'checking',label:'Checking accounts'},
+        {type:'savings',label:'Savings buckets'},
+        {type:'cash',label:'Other'}
+      ];
+      const options = groups.flatMap(group => {
+        const groupAccounts = accounts.filter(account => account.type === group.type);
+        if (group.type === 'credit' && groupAccounts.length === 0) {
+          const option = document.createElement('option');
+          option.value = 'credit-card-not-set-up';
+          option.textContent = 'No cards added — add one in Monthly Spending';
+          option.disabled = true;
+          groupAccounts.push({option});
+        }
+        if (group.type === 'cash' && groupAccounts.length === 0) return [];
+        const optionGroup = document.createElement('optgroup');
+        optionGroup.label = group.label;
+        groupAccounts.forEach(account => {
+          if (account.option) {
+            optionGroup.appendChild(account.option);
+            return;
+          }
+          const option = document.createElement('option');
+          option.value = account.id ? `account:${account.id}` : `label:${account.label}`;
+          option.textContent = account.label;
+          option.dataset.accountLabel = account.label;
+          if (account.id) option.dataset.accountId = account.id;
+          optionGroup.appendChild(option);
+        });
+        return [optionGroup];
+      });
+      accountSelect.replaceChildren(...options);
       accountSelect.value = selectedAccount.id ? `account:${selectedAccount.id}` : `label:${selectedAccount.label}`;
+      card.querySelector('.spending-account-help').classList.toggle('hidden',accounts.some(account => account.type === 'credit'));
     }
     function renderCalendarDay(card) {
       const list = card.querySelector('.calendar-event-list');
