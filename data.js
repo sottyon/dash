@@ -272,6 +272,14 @@
       } else {
         const content = document.createElement('div');
         content.className = 'dashboard-page-content';
+        if (pageNumber === 2) {
+          for (const className of ['px-4', 'py-7', 'md:px-9', 'md:py-10']) {
+            if (page.classList.contains(className)) {
+              content.classList.add(className);
+              page.classList.remove(className);
+            }
+          }
+        }
         while (page.firstChild) content.appendChild(page.firstChild);
         page.appendChild(content);
       }
