@@ -1317,16 +1317,18 @@
     }
     function spendingAccounts() {
       return [
-        'Cash / checking',
-        ...records.filter(record => ['credit','savings'].includes(record.type) && record.label)
-          .map(record => `${record.type === 'credit' ? 'Credit card' : 'Savings'} · ${record.label}`)
+        {label:'Cash / checking'},
+        ...records.filter(record => ['credit','savings','checking'].includes(record.type) && record.label)
+          .map(record => ({
+            label:`${record.type === 'credit' ? 'Credit card' : record.type === 'savings' ? 'Savings' : 'Checking'} · ${record.label}`,
+            id:record.__backendId
+          }))
       ];
     }
     function updateExpenseSelectors(card) {
       const categorySelect = card.querySelector('.spending-category');
       const accountSelect = card.querySelector('.spending-account');
       const selectedCategory = categorySelect.value || 'Other';
-      const selectedAccount = accountSelect.value || 'Cash / checking';
       const categories = expenseCategories();
       if (!categories.includes(selectedCategory)) categories.push(selectedCategory);
       categorySelect.replaceChildren(...categories.map(category => {
@@ -1337,14 +1339,23 @@
       }));
       categorySelect.value = selectedCategory;
       const accounts = spendingAccounts();
-      if (!accounts.includes(selectedAccount)) accounts.push(selectedAccount);
+      const currentAccountValue = accountSelect.value;
+      const defaultChecking = accounts.find(account => account.id && records.some(record =>
+        record.__backendId === account.id && record.type === 'checking'));
+      const currentAccount = accounts.find(account => account.id === currentAccountValue || account.label === currentAccountValue);
+      const selectedAccount = !accountSelect.dataset.userSelected && (!currentAccountValue || currentAccountValue === 'label:Cash / checking') && defaultChecking
+        ? defaultChecking
+        : currentAccount || accounts.find(account => account.label === currentAccountValue.replace(/^label:/, '')) || {label:currentAccountValue.replace(/^label:/, '') || 'Cash / checking'};
+      if (!accounts.some(account => account.label === selectedAccount.label && account.id === selectedAccount.id)) accounts.push(selectedAccount);
       accountSelect.replaceChildren(...accounts.map(account => {
         const option = document.createElement('option');
-        option.value = account;
-        option.textContent = account;
+        option.value = account.id ? `account:${account.id}` : `label:${account.label}`;
+        option.textContent = account.label;
+        option.dataset.accountLabel = account.label;
+        if (account.id) option.dataset.accountId = account.id;
         return option;
       }));
-      accountSelect.value = selectedAccount;
+      accountSelect.value = selectedAccount.id ? `account:${selectedAccount.id}` : `label:${selectedAccount.label}`;
     }
     function renderCalendarDay(card) {
       const list = card.querySelector('.calendar-event-list');
@@ -1477,6 +1488,9 @@
         card.querySelector('.spending-input').id = `spending-${i}`;
         card.querySelector('.spending-category').id = `expense-category-${i}`;
         card.querySelector('.spending-account').id = `expense-account-${i}`;
+        card.querySelector('.spending-account').addEventListener('change', event => {
+          event.currentTarget.dataset.userSelected = 'true';
+        });
         card.querySelector('.habit-input-label').htmlFor = `habit-${i}`;
         card.querySelector('.habit-input').id = `habit-${i}`;
         for (const [selector,category] of [['.spending-form','spending'],['.habit-form','habit']]) {
@@ -1498,7 +1512,10 @@
                 category,
                 ...(category === 'spending' ? {
                   expense_category: form.querySelector('.spending-category').value,
-                  account: form.querySelector('.spending-account').value
+                  account: form.querySelector('.spending-account').selectedOptions[0].dataset.accountLabel,
+                  ...(form.querySelector('.spending-account').selectedOptions[0].dataset.accountId
+                    ? {account_id:form.querySelector('.spending-account').selectedOptions[0].dataset.accountId}
+                    : {})
                 } : {}),
                 created_at: new Date().toISOString()
               });
@@ -1992,7 +2009,7 @@
      <div class="flex items-baseline justify-between mb-4">
       <h2 id="money-heading" data-template-id="money-heading" class="canva-text" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 24px;">Money at a glance</h2><span data-template-id="money-caption" class="canva-text text-xs text-[#78856e]" style="color: rgb(120, 133, 110); font-weight: 400; font-style: normal; font-size: 12px;">Latest balances · all quarters</span>
      </div>
-     <div class="grid sm:grid-cols-2 gap-4">
+     <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
       <article data-template-id="credit-card" class="canva-card surface bg-[#d0efef] rounded-2xl p-6" style="background: rgb(208, 239, 239);">
        <div class="flex items-center justify-between mb-6"><span data-template-id="credit-label" class="canva-text text-sm font-semibold text-[#41604e]" style="color: rgb(0, 0, 0); font-weight: 600; font-style: normal; font-size: 14px;">Credit card balances</span><i data-lucide="credit-card" class="w-5 h-5 text-[#41604e]" aria-hidden="true"></i>
        </div>
@@ -2003,13 +2020,20 @@
        <div id="credit-list" class="mt-4"></div>
       </article>
       <article data-template-id="savings-card" class="canva-card surface bg-[#fdbfce] rounded-2xl p-6" style="background: rgb(253, 191, 206);">
-       <div class="flex items-center justify-between mb-6"><span data-template-id="savings-label" class="canva-text text-sm font-semibold text-[#835b37]" style="color: rgb(218, 123, 135); font-weight: 600; font-style: normal; font-size: 14px;">Savings</span><i data-lucide="piggy-bank" class="w-5 h-5 text-[#835b37]" aria-hidden="true"></i>
+       <div class="flex items-center justify-between mb-6"><span data-template-id="savings-label" class="canva-text text-sm font-semibold text-[#835b37]" style="color: rgb(218, 123, 135); font-weight: 600; font-style: normal; font-size: 14px;">Savings buckets</span><i data-lucide="piggy-bank" class="w-5 h-5 text-[#835b37]" aria-hidden="true"></i>
        </div>
        <div id="savings-total" class="text-3xl sm:text-4xl font-semibold tracking-tight" aria-live="polite">
         $0.00
        </div>
        <p id="savings-count" class="text-xs text-[#836f5c] mt-3"></p>
        <div id="savings-list" class="mt-4"></div>
+      </article>
+      <article data-template-id="checking-card" class="canva-card surface bg-[#e8eee6] rounded-2xl p-6" style="background: rgb(232, 238, 230);">
+       <div class="flex items-center justify-between mb-6"><span class="canva-text text-sm font-semibold text-[#41604e]">Checking account</span><i data-lucide="landmark" class="w-5 h-5 text-[#41604e]" aria-hidden="true"></i>
+       </div>
+       <div id="checking-total" class="text-3xl sm:text-4xl font-semibold tracking-tight" aria-live="polite">$0.00</div>
+       <p id="checking-count" class="text-xs text-[#69756d] mt-3"></p>
+       <div id="checking-list" class="mt-4"></div>
       </article>
      </div>
     </section>
@@ -2071,15 +2095,16 @@
       </div><button id="close-form" type="button" aria-label="Close entry form" class="rounded-lg p-2 hover:bg-[#e8eee6]"><i data-lucide="x" class="w-5 h-5"></i></button>
      </div>
      <form id="entry-form" class="space-y-4">
-      <div><label data-template-id="type-label" class="canva-text block text-sm font-semibold mb-2" for="entry-type" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 14px;">Entry type</label><select id="entry-type" class="field" required=""><option value="goal">Quarterly goal</option><option value="credit">Credit card balance</option><option value="savings">Savings balance</option><option value="achievement">Achievement</option><option value="idea">Parking lot idea</option></select>
+      <div><label data-template-id="type-label" class="canva-text block text-sm font-semibold mb-2" for="entry-type" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 14px;">Entry type</label><select id="entry-type" class="field" required=""><option value="goal">Quarterly goal</option><option value="credit">Credit card</option><option value="savings">Savings bucket</option><option value="checking">Checking account</option><option value="achievement">Achievement</option><option value="idea">Parking lot idea</option></select>
       </div>
       <div id="category-field"><label data-template-id="category-label" class="canva-text block text-sm font-semibold mb-2" for="entry-category" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 14px;">Category</label><select id="entry-category" class="field"><option value="Finance">Finance</option><option value="Health">Health</option><option value="Business">Business</option><option value="Personal">Personal</option></select>
       </div>
       <div><label data-template-id="entry-label-label" class="canva-text block text-sm font-semibold mb-2" for="entry-label" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 14px;">Title or account name</label><input id="entry-label" class="field" maxlength="100" required="">
       </div>
-      <div id="value-field"><label data-template-id="value-label" class="canva-text block text-sm font-semibold mb-2" for="entry-value" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 14px;">Amount or target</label><input id="entry-value" class="field" maxlength="100" inputmode="decimal">
-       <p data-template-id="value-hint" class="canva-text text-xs text-[#69756d] mt-1" style="color: rgb(105, 117, 109); font-weight: 400; font-style: normal; font-size: 12px;">For balances, enter a number in US dollars. For goals, describe your target.</p>
+      <div id="value-field"><label id="value-label" data-template-id="value-label" class="canva-text block text-sm font-semibold mb-2" for="entry-value" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 14px;">Amount or target</label><input id="entry-value" class="field" maxlength="100" inputmode="decimal">
+       <p data-template-id="value-hint" class="canva-text text-xs text-[#69756d] mt-1" style="color: rgb(105, 117, 109); font-weight: 400; font-style: normal; font-size: 12px;">For accounts and savings buckets, enter the starting balance in US dollars. For goals, describe your target.</p>
       </div>
+      <div id="balance-date-field" class="hidden"><label class="canva-text block text-sm font-semibold mb-2" for="balance-as-of">Starting balance date</label><input id="balance-as-of" class="field" type="date"><p class="text-xs text-[#69756d] mt-1">The starting balance is from the beginning of this day; transactions dated on or after it are applied.</p></div>
       <div><label data-template-id="notes-label" class="canva-text block text-sm font-semibold mb-2" for="entry-notes" style="color: rgb(36, 48, 43); font-weight: 600; font-style: normal; font-size: 14px;">Notes (optional)</label><textarea id="entry-notes" class="field min-h-[90px] resize-y" maxlength="500"></textarea>
       </div>
       <p id="form-error" role="alert" class="text-sm text-[#a44939]"></p>
@@ -2092,7 +2117,7 @@
   <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const types = ['credit','savings','goal','achievement','idea'];
+  const types = ['credit','savings','checking','goal','achievement','idea'];
   const categories = ['Finance','Health','Business','Personal'];
   const money = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
   let records = [], ready = false, editing = null, busy = false;
@@ -2171,21 +2196,55 @@
     }));
   }
 
+  function isAccountType(type) {
+    return ['credit','savings','checking'].includes(type);
+  }
+  function todayKey() {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  }
+  function accountLabel(account) {
+    const prefix = account.type === 'credit' ? 'Credit card' : account.type === 'savings' ? 'Savings' : 'Checking';
+    return `${prefix} · ${account.label}`;
+  }
+  function accountTransactions(account) {
+    const checkingAccounts = records.filter(record => record.type === 'checking');
+    return records.filter(record => {
+      if (record.category !== 'spending' || !/^\d{4}-\d{2}-\d{2}$/.test(record.priority || '')) return false;
+      if (!account.balance_as_of || record.priority < account.balance_as_of) return false;
+      if (record.account_id) return record.account_id === account.__backendId;
+      if (record.account === accountLabel(account) || account.account_aliases?.includes(record.account)) return true;
+      return account.type === 'checking' && checkingAccounts.length === 1 && record.account === 'Cash / checking';
+    });
+  }
+  function currentAccountBalance(account) {
+    const startingBalance = Number(account.value) || 0;
+    const transactions = accountTransactions(account).reduce((sum, record) => sum + (Number(record.title) || 0), 0);
+    return startingBalance + (account.type === 'credit' ? transactions : -transactions);
+  }
   function syncFormType() {
     const type = $('entry-type').value;
     $('category-field').classList.toggle('hidden',type !== 'goal');
     $('value-field').classList.toggle('hidden',type === 'achievement' || type === 'idea');
-    $('entry-value').required = type === 'credit' || type === 'savings';
-    $('entry-value').inputMode = (type === 'credit' || type === 'savings') ? 'decimal' : 'text';
+    $('balance-date-field').classList.toggle('hidden',!isAccountType(type));
+    $('balance-as-of').required = isAccountType(type);
+    $('entry-value').required = isAccountType(type);
+    $('entry-value').inputMode = isAccountType(type) ? 'decimal' : 'text';
+    $('entry-value').type = isAccountType(type) ? 'number' : 'text';
+    $('entry-value').step = isAccountType(type) ? '0.01' : '';
+    $('entry-value').min = isAccountType(type) ? '0' : '';
+    $('value-label').textContent = isAccountType(type) ? 'Starting balance' : 'Amount or target';
   }
   function openForm(record=null) {
     editing = record;
     $('entry-form').reset();
     $('form-error').textContent = '';
     $('entry-type').value = record?.type || 'goal';
+    $('entry-type').disabled = Boolean(record && isAccountType(record.type));
     $('entry-category').value = categories.includes(record?.category) ? record.category : 'Finance';
     $('entry-label').value = record?.label || '';
-    $('entry-value').value = record?.value || '';
+    $('entry-value').value = record?.value ?? '';
+    $('balance-as-of').value = record?.balance_as_of || todayKey();
     $('entry-notes').value = record?.notes || '';
     syncFormType();
     $('form-overlay').classList.remove('hidden');
@@ -2239,12 +2298,16 @@
   }
   function updateEntry(row,record) {
     const [title,value,notes] = row.children;
-    const displayValue = record.type==='credit'||record.type==='savings' ? formatAmount(record.value) : safe(record.value);
+    const displayValue = isAccountType(record.type) ? `Current ${formatAmount(currentAccountBalance(record))} · Starting ${formatAmount(record.value)}`
+      : safe(record.value);
     if(title.textContent!==safe(record.label)) title.textContent=safe(record.label);
     if(value.textContent!==displayValue) value.textContent=displayValue;
     value.hidden=!displayValue;
-    if(notes.textContent!==safe(record.notes)) notes.textContent=safe(record.notes);
-    notes.hidden=!record.notes;
+    const noteText = isAccountType(record.type)
+      ? `Starting balance as of ${record.balance_as_of || 'date not set'}${record.notes ? ` · ${record.notes}` : ''}`
+      : safe(record.notes);
+    if(notes.textContent!==noteText) notes.textContent=noteText;
+    notes.hidden=!noteText;
   }
   function reconcile(id,items) {
     const host=$(id);
@@ -2259,7 +2322,7 @@
     let empty=host.querySelector(':scope > .empty-copy');
     if(!items.length) {
       if(!empty){empty=document.createElement('p');empty.className='empty-copy text-sm text-[#89938a] py-2';host.appendChild(empty);}
-      empty.textContent=id==='credit-list'||id==='savings-list' ? 'No accounts yet.' : 'Nothing here yet.';
+      empty.textContent=['credit-list','savings-list','checking-list'].includes(id) ? 'No accounts yet.' : 'Nothing here yet.';
     } else empty?.remove();
   }
   function render() {
@@ -2269,11 +2332,13 @@
     for(const category of categories) reconcile(category.toLowerCase()+'-list',inQuarter.filter(r=>r.type==='goal'&&r.category===category));
     reconcile('achievement-list',inQuarter.filter(r=>r.type==='achievement'));
     reconcile('idea-list',inQuarter.filter(r=>r.type==='idea'));
-    for(const type of ['credit','savings']){
+    for(const type of ['credit','savings','checking']){
       const entries=records.filter(r=>r.type===type);
       reconcile(type+'-list',entries);
-      $(type+'-total').textContent=formatAmount(entries.reduce((sum,r)=>sum+(Number(r.value)||0),0));
-      $(type+'-count').textContent=`${entries.length} ${entries.length===1?'account':'accounts'} tracked`;
+      $(type+'-total').textContent=formatAmount(entries.reduce((sum,r)=>sum+currentAccountBalance(r),0));
+      $(type+'-count').textContent=type==='savings'
+        ? `${entries.length} ${entries.length===1?'bucket':'buckets'} tracked`
+        : `${entries.length} ${entries.length===1?'account':'accounts'} tracked`;
     }
     renderBudget();
   }
@@ -2315,13 +2380,24 @@
     const label=$('entry-label').value.trim();
     const raw=$('entry-value').value.trim();
     if(!label){$('form-error').textContent='Please enter a title.';return;}
-    if((type==='credit'||type==='savings')&&(!raw||!Number.isFinite(Number(raw))||Number(raw)<0)){
+    if(isAccountType(type)&&(!raw||!Number.isFinite(Number(raw))||Number(raw)<0)){
       $('form-error').textContent='Enter a valid, non-negative dollar amount.';return;
     }
+    if(isAccountType(type)&&!$('balance-as-of').value){
+      $('form-error').textContent='Choose the date for this starting balance.';return;
+    }
+    const accountType=type==='checking'?'checking':type;
     const record={
-      type,label,value:type==='achievement'||type==='idea'?'':raw,
+      type:accountType,label,value:type==='achievement'||type==='idea'?'':isAccountType(type)?Number(raw):raw,
+      ...(isAccountType(type)?{balance_as_of:$('balance-as-of').value}:{}),
+      ...(isAccountType(type)&&editing?{
+        account_aliases:[...new Set([
+          ...(editing.account_aliases||[]),
+          ...(editing.label===label?[]:[accountLabel(editing)])
+        ])]
+      }:{}),
       category:type==='goal'?$('entry-category').value:'',
-      status:type==='credit'||type==='savings'?'active':editing?.status||quarter(),
+      status:isAccountType(type)?'active':editing?.status||quarter(),
       notes:$('entry-notes').value.trim(),
       created_at:editing?.created_at||new Date().toISOString()
     };
