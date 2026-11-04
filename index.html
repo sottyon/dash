@@ -2652,6 +2652,10 @@
 
   const statuses = ['Want to read', 'Reading', 'Finished'];
 
+  function isBookRecord(record) {
+    return typeof record.book_title === 'string' && record.book_title.trim().length > 0;
+  }
+
   function safeCoverUrl(url) {
     try {
       const cover = new URL(url);
@@ -2782,7 +2786,7 @@
   }
 
   function updateShelf(data) {
-    books = [...data].sort((a, b) => (b.added_at || '').localeCompare(a.added_at || ''));
+    books = data.filter(isBookRecord).sort((a, b) => (b.added_at || '').localeCompare(a.added_at || ''));
     document.getElementById('books-empty-state').hidden = books.length > 0;
     document.getElementById('book-count').textContent = `${books.length} ${books.length === 1 ? 'book' : 'books'} on your shelf`;
     const current = new Map([...shelfEl.children].map(node => [node.dataset.recordId, node]));
@@ -2834,7 +2838,7 @@
             remove.dataset.confirm = 'yes'; remove.textContent = 'Confirm remove'; cancel.classList.remove('hidden'); return;
           }
           const latest = books.find(x => x.__backendId === card.dataset.recordId);
-          if (!latest) return;
+          if (!latest || !isBookRecord(latest)) return;
           remove.disabled = true; cancel.disabled = true; remove.textContent = 'Removing…';
           try {
             const outcome = await window.dataSdk.delete(latest);
