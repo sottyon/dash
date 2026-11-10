@@ -325,6 +325,10 @@
     if (document.visibilityState !== 'visible' || !activeUserId) return;
     flushPendingWrites(activeUserId).then(() => refreshRecords()).catch(reportRefreshFailure);
   });
+  window.setInterval(() => {
+    if (!activeUserId || !navigator.onLine || document.visibilityState !== 'visible') return;
+    refreshRecords().catch(reportRefreshFailure);
+  }, 60_000);
 
   async function saveRecord(record, id) {
     try {
@@ -513,6 +517,23 @@
       } catch (error) {
         return { isOk: false, session: null, error };
       }
+    },
+    async getTaskReminder() {
+      const { data, error } = await getClient().rpc('get_dashboard_task_reminder');
+      if (error) throw error;
+      return data?.[0] || null;
+    },
+    async saveTaskReminder(phoneNumber, timeZone, consent) {
+      const { error } = await getClient().rpc('save_dashboard_task_reminder', {
+        p_phone_number: phoneNumber,
+        p_time_zone: timeZone,
+        p_consent: consent
+      });
+      if (error) throw error;
+    },
+    async disableTaskReminder() {
+      const { error } = await getClient().rpc('disable_dashboard_task_reminder');
+      if (error) throw error;
     }
   };
 
