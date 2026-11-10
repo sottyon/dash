@@ -36,16 +36,18 @@ Tasks, habits, spending, and book records created after setup are stored in the 
 
 ## Daily task texts
 
-The optional daily task reminder runs in Supabase, so it does not depend on the iPhone app being open. The included Edge Function checks hourly and sends at 8 AM in each configured user's time zone, including during daylight-saving changes. It texts up to 25 incomplete Work and Personal tasks, or a no-open-tasks message. Text-message rates and a Twilio account/number are required. The reminder is not active until you complete these setup steps:
+The optional Sot Dash daily task reminder runs in Supabase, so it does not depend on the iPhone app being open. The included Edge Function checks every 15 minutes and sends at 8 AM in each opted-in user's time zone, including during daylight-saving changes. The more frequent checks allow another attempt after a temporary send failure during the 8 AM hour, while the saved send date prevents duplicate reminders. It texts up to 25 incomplete Work and Personal tasks, or a no-open-tasks message. Text-message rates and a Twilio account/number are required.
+
+The public SMS terms and privacy policy are `https://sottyon.github.io/dash/terms.html` and `https://sottyon.github.io/dash/privacy.html`. They are static pages and do not require a login. In Twilio A2P campaign registration, use the terms URL for **TermsAndConditionsUrl** (and the privacy URL for the privacy-policy field). The opt-in flow identifies the sending brand as **Sot Dash**, requires an unchecked consent box, and records consent before enabling reminders. Mobile numbers and opt-in data are not shared with third parties or affiliates for marketing or promotional purposes.
+
+To enable the reminder service:
 
 1. In your Twilio account, obtain an Account SID, Auth Token, and SMS-capable sending number. Add them as Edge Function secrets in the Supabase Dashboard; do not put the values in this repository or share them in chat.
 2. Deploy the function from the repository root with `supabase functions deploy daily-task-reminder`.
 3. Store your project URL and service-role JWT in Supabase Vault. Replace the placeholders locally with values from your Supabase project; never commit them:
    `select vault.create_secret('https://YOUR_PROJECT_REF.supabase.co', 'daymark_supabase_url');`
    `select vault.create_secret('YOUR_SERVICE_ROLE_JWT', 'daymark_service_role_key');`
-4. Open `supabase/daily-task-reminder-setup.sql` from the repository in a text editor, copy the file's entire SQL contents, paste those contents into a new Supabase SQL Editor query, and run the query. The SQL Editor cannot execute a repository file path by itself; do not paste the path as the query.
-5. Find your account UUID under **Authentication > Users**, then add a reminder row in the SQL Editor. Replace the placeholders with your UUID and phone number in E.164 format:
-   `insert into public.dashboard_task_reminders (user_id, phone_number, time_zone) values ('YOUR_AUTH_USER_UUID', '+15551234567', 'America/New_York') on conflict (user_id) do update set phone_number = excluded.phone_number, time_zone = excluded.time_zone, enabled = true;`
-   The reminder table has row-level security enabled with no client access policies; only the service role used by the Edge Function can read phone numbers.
+4. Open `supabase/daily-task-reminder-setup.sql` from the repository in a text editor, copy its entire contents, paste into a new Supabase SQL Editor query, and run it. This creates or updates the consent fields, secure settings functions, and 15-minute schedule. If the reminder was already set up, rerunning it replaces the previous schedule without changing dashboard records. The SQL Editor cannot execute a repository file path by itself; do not paste the path as the query.
+5. Publish the site and sign in to Sot Dash. In the **Daily task texts** panel, enter the recipient number in E.164 format (for example, `+15551234567`), confirm the time zone, and actively check the consent box before saving. Existing reminder rows without recorded consent are excluded from sends until the user completes this opt-in. The reminder table remains inaccessible to browser clients; signed-in users can manage only their own settings through the provided database functions.
 
-To pause reminders, set that user's `enabled` column to `false` in the SQL Editor. The scheduled job checks the configured time zone and sends at most one reminder per local date.
+Users can pause reminders in the dashboard or by replying STOP. The scheduled job checks the configured time zone and sends at most one reminder per local date.

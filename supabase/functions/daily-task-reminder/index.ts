@@ -49,7 +49,8 @@ Deno.serve(async () => {
   const { data: reminders, error: reminderError } = await supabase
     .from('dashboard_task_reminders')
     .select('user_id, phone_number, time_zone, last_sent_on')
-    .eq('enabled', true);
+    .eq('enabled', true)
+    .not('consented_at', 'is', null);
 
   if (reminderError) {
     console.error('Could not load task reminder settings:', reminderError.message);
@@ -89,8 +90,8 @@ Deno.serve(async () => {
       taskLines.push(`…and ${tasks.length - taskLines.length} more in your dashboard.`);
     }
     const body = taskLines.length
-      ? `Good morning! Here are today's tasks:\n${taskLines.join('\n')}`
-      : 'Good morning! You have no open dashboard tasks today.';
+      ? `Sot Dash: Good morning! Here are today's tasks:\n${taskLines.join('\n')}\nManage reminders in your dashboard. Reply STOP to opt out.`
+      : 'Sot Dash: Good morning! You have no open dashboard tasks today. Manage reminders in your dashboard. Reply STOP to opt out.';
     const form = new URLSearchParams({
       To: reminder.phone_number,
       From: fromNumber,
@@ -107,6 +108,23 @@ Deno.serve(async () => {
     });
     if (!smsResponse.ok) {
       const responseText = await smsResponse.text();
+      let errorCode: number | undefined;
+      try {
+        errorCode = JSON.parse(responseText).code;
+      } catch {
+        // Keep the original Twilio response for the failure log below.
+      }
+      if (errorCode === 21610) {
+        const { error: optOutError } = await supabase
+          .from('dashboard_task_reminders')
+          .update({ enabled: false })
+          .eq('user_id', reminder.user_id);
+        if (optOutError) {
+          console.error(`Twilio blocked an opted-out reminder, but the opt-out could not be saved for ${reminder.user_id}:`, optOutError.message);
+          return Response.json({ error: 'Could not save an SMS opt-out.' }, { status: 500 });
+        }
+        continue;
+      }
       console.error(`Twilio rejected task reminder for ${reminder.user_id}:`, smsResponse.status, responseText);
       return Response.json({ error: 'Twilio could not send a task reminder.' }, { status: 502 });
     }
