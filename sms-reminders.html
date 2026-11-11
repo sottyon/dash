@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Opt in to Sot Dash daily task reminder text messages.">
+  <title>Daily Task Text Reminders | Sot Dash</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <style>
+    :root { --ink:#24332e; --muted:#5f6f68; --line:#d8ddd9; --accent:#235d48; --soft:#f4f7f5; }
+    * { box-sizing:border-box; }
+    body { max-width:760px; margin:0 auto; padding:32px 20px 56px; color:var(--ink); font:16px/1.65 system-ui, sans-serif; }
+    h1, h2 { line-height:1.2; }
+    h1 { margin:8px 0 12px; }
+    h2 { margin:0 0 6px; font-size:20px; }
+    a { color:var(--accent); }
+    .card { margin-top:24px; padding:22px; border:1px solid var(--line); border-radius:16px; background:#fff; }
+    .card.soft { background:var(--soft); }
+    .muted { color:var(--muted); }
+    label { display:block; font-weight:600; font-size:14px; margin-top:14px; }
+    input[type=text], input[type=email], input[type=password], input[type=tel] {
+      width:100%; min-height:44px; margin-top:6px; border:1px solid var(--line); border-radius:9px; padding:10px 12px; font:inherit; color:inherit;
+    }
+    .grid { display:grid; gap:0 16px; grid-template-columns:1fr 1fr; }
+    @media (max-width:600px) { .grid { grid-template-columns:1fr; } }
+    .consent { display:flex; gap:10px; align-items:flex-start; font-weight:400; font-size:15px; line-height:1.55; margin-top:18px; }
+    .consent input { margin-top:5px; width:18px; height:18px; flex-shrink:0; }
+    .consent-record { margin-top:18px; padding:12px 14px; border-radius:10px; background:var(--soft); font-size:15px; }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }
+    button { min-height:44px; padding:10px 18px; border-radius:10px; border:1px solid var(--accent); font:inherit; font-weight:600; cursor:pointer; }
+    button.primary { background:var(--accent); color:#fff; }
+    button.secondary { background:#fff; color:var(--accent); }
+    button:disabled { opacity:.6; cursor:default; }
+    .status { min-height:24px; margin-top:12px; font-size:14px; font-weight:600; }
+    ul { padding-left:20px; }
+    [hidden] { display:none !important; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./supabase-config.js"></script>
+  <script src="./data.js"></script>
+</head>
+<body>
+  <main>
+    <p><a href="./index.html">&larr; Back to Sot Dash</a></p>
+    <h1>Sot Dash daily task text reminders</h1>
+    <p>Sot Dash can text you one reminder each morning (around 8:00 a.m. in your time zone) listing your open Work and Personal tasks. The program is optional and you can turn it off at any time.</p>
+
+    <section class="card soft" aria-labelledby="program-heading">
+      <h2 id="program-heading">Program details</h2>
+      <ul>
+        <li><strong>Sender:</strong> Sot Dash</li>
+        <li><strong>Messages:</strong> recurring automated daily task reminders, up to 1 message per day</li>
+        <li><strong>Cost:</strong> message and data rates may apply</li>
+        <li><strong>Opt out:</strong> reply STOP to any message, or pause reminders on this page</li>
+        <li><strong>Help:</strong> reply HELP to any message</li>
+        <li>Consent is not a condition of purchase. Your mobile number and opt-in data are not shared with third parties or affiliates for marketing or promotional purposes.</li>
+      </ul>
+      <p class="muted">Read the <a href="./terms.html">SMS Terms</a> and <a href="./privacy.html">Privacy Policy</a>.</p>
+    </section>
+
+    <section id="sign-in-card" class="card" aria-labelledby="sign-in-heading" hidden>
+      <h2 id="sign-in-heading">Sign in to save your settings</h2>
+      <p class="muted">Reminders are tied to your Sot Dash account. Sign in with your email and password, then complete the form below.</p>
+      <form id="sign-in-form">
+        <label for="sign-in-email">Email address</label>
+        <input id="sign-in-email" type="email" autocomplete="username" required>
+        <label for="sign-in-password">Password</label>
+        <input id="sign-in-password" type="password" autocomplete="current-password" required>
+        <div class="actions"><button id="sign-in-submit" type="submit" class="primary">Sign in</button></div>
+      </form>
+      <p id="sign-in-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card" aria-labelledby="opt-in-heading">
+      <h2 id="opt-in-heading">Text reminder opt-in</h2>
+      <p id="signed-in-as" class="muted" hidden></p>
+      <form id="sms-form" novalidate>
+        <div class="grid">
+          <div>
+            <label for="sms-phone">Mobile phone number</label>
+            <input id="sms-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="16" pattern="\+[1-9][0-9]{7,14}" placeholder="+15551234567" required>
+          </div>
+          <div>
+            <label for="sms-time-zone">Time zone</label>
+            <input id="sms-time-zone" type="text" list="time-zones" maxlength="80" placeholder="America/New_York" required>
+            <datalist id="time-zones"></datalist>
+          </div>
+        </div>
+        <label id="consent-block" class="consent">
+          <input id="sms-consent" type="checkbox">
+          <span>I agree to receive recurring automated daily task reminder texts from Sot Dash at the number above (up to 1 message per day). Message and data rates may apply. Consent is not a condition of purchase. Reply STOP to opt out or HELP for help. I have read the <a href="./terms.html" target="_blank" rel="noopener noreferrer">SMS Terms</a> and <a href="./privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</span>
+        </label>
+        <p id="consent-record" class="consent-record" hidden></p>
+        <div class="actions">
+          <button id="sms-save" type="submit" class="primary">Agree and enable texts</button>
+          <button id="sms-pause" type="button" class="secondary" hidden>Pause reminders</button>
+        </div>
+      </form>
+      <p id="sms-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <p class="muted" style="margin-top:28px; font-size:14px;">Signing up happens only on this page: you enter your number and actively check the consent box. The box is never pre-checked.</p>
+  </main>
+
+  <script>
+    (() => {
+      const $ = id => document.getElementById(id);
+      const phone = $('sms-phone');
+      const timeZone = $('sms-time-zone');
+      const consent = $('sms-consent');
+      const consentBlock = $('consent-block');
+      const consentRecord = $('consent-record');
+      const save = $('sms-save');
+      const pause = $('sms-pause');
+      const status = $('sms-status');
+      let signedIn = false;
+      let saved = null;
+
+      timeZone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      try {
+        const list = $('time-zones');
+        for (const zone of Intl.supportedValuesOf('timeZone')) {
+          const option = document.createElement('option');
+          option.value = zone;
+          list.appendChild(option);
+        }
+      } catch (error) { /* older browsers: plain text field */ }
+
+      // Consent is recorded once per phone number. It is only requested again
+      // if the user enters a different number than the one they agreed for.
+      function hasConsentFor(number) {
+        return Boolean(saved && saved.consented_at && saved.phone_number === number);
+      }
+
+      function render() {
+        const needsConsent = !hasConsentFor(phone.value.trim());
+        consentBlock.hidden = !needsConsent;
+        consentRecord.hidden = needsConsent;
+        if (!needsConsent) {
+          const when = new Date(saved.consented_at).toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' });
+          consentRecord.textContent = `You agreed to receive Sot Dash reminder texts at ${saved.phone_number} on ${when}. You won't be asked again unless you change your number.`;
+        }
+        if (needsConsent) save.textContent = 'Agree and enable texts';
+        else save.textContent = saved.enabled ? 'Save changes' : 'Resume reminders';
+        pause.hidden = !(saved && saved.enabled);
+      }
+
+      async function loadReminder() {
+        try {
+          saved = await window.dataSdk.getTaskReminder();
+          if (saved) {
+            phone.value = saved.phone_number || '';
+            timeZone.value = saved.time_zone || timeZone.value;
+            status.textContent = saved.enabled && saved.consented_at
+              ? 'Daily text reminders are on.'
+              : 'Text reminders are off.';
+          } else {
+            status.textContent = 'Text reminders are off.';
+          }
+        } catch (error) {
+          status.textContent = `Could not load your reminder settings: ${error.message || error}`;
+        }
+        render();
+      }
+
+      phone.addEventListener('input', render);
+
+      $('sms-form').addEventListener('submit', async event => {
+        event.preventDefault();
+        if (!signedIn) {
+          status.textContent = 'Sign in above to save your reminder settings.';
+          $('sign-in-email').focus();
+          return;
+        }
+        const number = phone.value.trim();
+        if (!/^\+[1-9][0-9]{7,14}$/.test(number)) {
+          status.textContent = 'Enter your number in international format, for example +15551234567.';
+          phone.focus();
+          return;
+        }
+        const needsConsent = !hasConsentFor(number);
+        if (needsConsent && !consent.checked) {
+          status.textContent = 'Check the consent box to enable text reminders.';
+          consent.focus();
+          return;
+        }
+        save.disabled = true;
+        status.textContent = 'Saving…';
+        try {
+          await window.dataSdk.saveTaskReminder(number, timeZone.value.trim(), needsConsent ? consent.checked : false);
+          consent.checked = false;
+          await loadReminder();
+          status.textContent = 'Saved. Daily text reminders are on; message and data rates may apply.';
+        } catch (error) {
+          status.textContent = `Could not save: ${error.message || error}`;
+        } finally {
+          save.disabled = false;
+        }
+      });
+
+      pause.addEventListener('click', async () => {
+        pause.disabled = true;
+        status.textContent = 'Pausing reminders…';
+        try {
+          await window.dataSdk.disableTaskReminder();
+          await loadReminder();
+          status.textContent = 'Reminders are paused. Click "Resume reminders" any time to turn them back on.';
+        } catch (error) {
+          status.textContent = `Could not pause reminders: ${error.message || error}`;
+        } finally {
+          pause.disabled = false;
+        }
+      });
+
+      $('sign-in-form').addEventListener('submit', async event => {
+        event.preventDefault();
+        const submit = $('sign-in-submit');
+        submit.disabled = true;
+        $('sign-in-status').textContent = 'Signing in…';
+        const result = await window.dataSdk.signInWithPassword($('sign-in-email').value.trim(), $('sign-in-password').value);
+        if (result.isOk) {
+          location.reload();
+        } else {
+          $('sign-in-status').textContent = `Could not sign in: ${result.error?.message || 'unknown error'}`;
+          submit.disabled = false;
+        }
+      });
+
+      document.addEventListener('DOMContentLoaded', async () => {
+        render();
+        try {
+          const result = await window.dataSdk.getSession();
+          signedIn = Boolean(result.isOk && result.session);
+          if (signedIn) {
+            $('signed-in-as').hidden = false;
+            $('signed-in-as').textContent = `Signed in as ${result.session.user.email}.`;
+            await loadReminder();
+          } else {
+            $('sign-in-card').hidden = false;
+          }
+        } catch (error) {
+          $('sign-in-card').hidden = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

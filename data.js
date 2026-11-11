@@ -544,7 +544,8 @@
       { id: 6, title: 'Week in Depth' },
       { id: 3, title: 'Habit Tracker' },
       { id: 4, title: 'Monthly Spending' },
-      { id: 5, title: 'Book Tracker' }
+      { id: 5, title: 'Book Tracker' },
+      { id: 'sms', title: 'Text Reminders', href: './sms-reminders.html' }
     ];
     const sidebar = document.createElement('aside');
     sidebar.className = 'dashboard-sidebar';
@@ -558,7 +559,7 @@
     pages.filter(page => page.id !== currentPage).forEach(page => {
       const link = document.createElement('a');
       link.className = 'dashboard-page-link';
-      link.href = `#page-${page.id}`;
+      link.href = page.href || `#page-${page.id}`;
       link.textContent = page.title;
       nav.appendChild(link);
     });
